@@ -1,0 +1,110 @@
+from moviepy.editor import *
+import numpy as np
+import cv2, math
+from utils.file_utils import read_lines
+from utils.srt_utils import parse_srt_time
+
+
+class VideoFrameClip(VideoClip):
+    def __init__(self, audioPath, filesPath, offsetsPath, timesPath, linesPath, size=(1920, 1080), fps=30, **kwargs):
+        super().__init__(**kwargs)
+
+        self.lineTimeOffsets = read_lines(offsetsPath)
+        self.textTimes = read_lines(timesPath)
+        self.textLines = read_lines(linesPath)
+
+        self.audioPath = audioPath
+        self.audio = AudioFileClip(audioPath)
+        self.duration = self.audio.duration
+        self.fps = fps
+        self.size = size
+
+        self.setup(filesPath)
+
+    def setup(self, filesPath):
+        folder = os.path.dirname(self.audioPath)
+        lines = read_lines(filesPath)
+        videos = []
+        for line in lines:
+            parts = line.split(" --> ")
+            if len(parts) > 1:
+                filename = parts[0].split(" ")[0]
+                start = parse_srt_time(parts[0].split(" ")[1])
+                end = parse_srt_time(parts[1])
+
+                videoPath = os.path.join(folder, filename)
+                videoClip = VideoFileClip(videoPath).subclip(start, end).resize(newsize=self.size)
+                videos.append((videoClip, start, end))
+
+        self.lineVideos = videos
+
+    def create_frame(self, width, height, color, opacity):
+        # Create a mask frame with the specified color and opacity
+        mask_frame = np.zeros((height, width, 4), dtype=np.uint8)
+        mask_frame[:, :, :3] = color  # Set RGB color
+        mask_frame[:, :, 3] = int(opacity * 255)  # Set alpha channel
+        return mask_frame
+
+    def text_index(self, t):
+        index = 0
+        for item in self.textTimes:
+            ftime = float(item.strip())
+            if ftime > t:
+                return index
+            if index < (len(self.textTimes) - 1):
+                index += 1
+        return index
+
+    def easeOutQuart(self, x):
+        return 1 - math.pow(1 - x, 5)
+
+    def file_frame(self, line, t):
+
+        parts = self.lineTimeOffsets[line].strip().split(":")
+        if len(parts) > 1:
+            audioStart = float(parts[0])
+            audioEnd = float(parts[1])
+
+            videoClip, videoStart, videoEnd = self.lineVideos[line]
+
+            fileDuration = videoEnd - videoStart
+            audioDuration = audioEnd - audioStart
+
+            ft = (t - audioStart) * fileDuration / audioDuration
+
+            return np.array(videoClip.get_frame(ft))
+        return None
+
+    def make_frame(self, t):
+        textIndex = self.text_index(t)
+        textLine = int(self.textLines[textIndex].strip())
+
+        frame = self.file_frame(textLine, t)
+
+        if frame is None:
+            width, height = self.size[0], self.size[1]
+            color = (0xFF, 0xFF, 0xFF)
+            opacity = 0.5
+
+            frame = self.create_frame(width, height, color, opacity)
+
+        return frame
+
+
+# coverPath = "E:\\youtube\\test\\image.png"
+
+audioPath = "E:\\douyin\\videos\\车床介绍.wav"
+filesPath = "E:\\douyin\\videos\\车床介绍.files"
+linesPath = "E:\\douyin\\videos\\车床介绍.lines"
+timesPath = "E:\\douyin\\videos\\车床介绍.times"
+offsetsPath = "E:\\douyin\\videos\\车床介绍.offsets"
+
+outputPath = "E:\\douyin\\videos\\车床介绍.mp4"
+
+# watermark = VideoFileClip(gif1, has_mask=True)  # loop gif
+# print(watermark.duration)
+# watermark.write_videofile(outputPath, codec='libx264', audio_codec='aac')
+
+videoClip = VideoFrameClip(audioPath, filesPath, offsetsPath, timesPath, linesPath)
+videoClip.write_videofile(outputPath, codec='libx264', audio_codec='aac', preset="fast", threads=8,
+                          ffmpeg_params=["-gpu", "cuda"])

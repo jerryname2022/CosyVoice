@@ -13,6 +13,7 @@
 # limitations under the License.
 import os
 import sys
+
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append('{}/../../..'.format(ROOT_DIR))
 sys.path.append('{}/../../../third_party/Matcha-TTS'.format(ROOT_DIR))
@@ -43,14 +44,14 @@ def main():
             zero_shot_request.tts_text = args.tts_text
             zero_shot_request.prompt_text = args.prompt_text
             prompt_speech = load_wav(args.prompt_wav, 16000)
-            zero_shot_request.prompt_audio = (prompt_speech.numpy() * (2**15)).astype(np.int16).tobytes()
+            zero_shot_request.prompt_audio = (prompt_speech.numpy() * (2 ** 15)).astype(np.int16).tobytes()
             request.zero_shot_request.CopyFrom(zero_shot_request)
         elif args.mode == 'cross_lingual':
             logging.info('send cross_lingual request')
             cross_lingual_request = cosyvoice_pb2.crosslingualRequest()
             cross_lingual_request.tts_text = args.tts_text
             prompt_speech = load_wav(args.prompt_wav, 16000)
-            cross_lingual_request.prompt_audio = (prompt_speech.numpy() * (2**15)).astype(np.int16).tobytes()
+            cross_lingual_request.prompt_audio = (prompt_speech.numpy() * (2 ** 15)).astype(np.int16).tobytes()
             request.cross_lingual_request.CopyFrom(cross_lingual_request)
         else:
             logging.info('send instruct request')

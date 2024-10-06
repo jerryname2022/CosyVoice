@@ -47,7 +47,8 @@ def main(args):
                            dither=0,
                            sample_frequency=16000)
         feat = feat - feat.mean(dim=0, keepdim=True)
-        embedding = ort_session.run(None, {ort_session.get_inputs()[0].name: feat.unsqueeze(dim=0).cpu().numpy()})[0].flatten().tolist()
+        embedding = ort_session.run(None, {ort_session.get_inputs()[0].name: feat.unsqueeze(dim=0).cpu().numpy()})[
+            0].flatten().tolist()
         utt2embedding[utt] = embedding
         spk = utt2spk[utt]
         if spk not in spk2embedding:
@@ -58,6 +59,7 @@ def main(args):
 
     torch.save(utt2embedding, '{}/utt2embedding.pt'.format(args.dir))
     torch.save(spk2embedding, '{}/spk2embedding.pt'.format(args.dir))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

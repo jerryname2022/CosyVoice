@@ -18,6 +18,7 @@ from modelscope import snapshot_download
 from cosyvoice.cli.frontend import CosyVoiceFrontEnd
 from cosyvoice.cli.model import CosyVoiceModel
 
+
 class CosyVoice:
 
     def __init__(self, model_dir):

@@ -2,17 +2,19 @@ import argparse
 import logging
 import requests
 
+
 def saveResponse(path, response):
     # 以二进制写入模式打开文件
     with open(path, 'wb') as file:
         # 将响应的二进制内容写入文件
         file.write(response.content)
 
+
 def main():
     api = args.api_base
     if args.mode == 'sft':
         url = api + "/api/inference/sft"
-        payload={
+        payload = {
             'tts': args.tts_text,
             'role': args.spk_id
         }
@@ -20,19 +22,19 @@ def main():
         saveResponse(args.tts_wav, response)
     elif args.mode == 'zero_shot':
         url = api + "/api/inference/zero-shot"
-        payload={
+        payload = {
             'tts': args.tts_text,
             'prompt': args.prompt_text
         }
-        files=[('audio', ('prompt_audio.wav', open(args.prompt_wav,'rb'), 'application/octet-stream'))]
+        files = [('audio', ('prompt_audio.wav', open(args.prompt_wav, 'rb'), 'application/octet-stream'))]
         response = requests.request("POST", url, data=payload, files=files)
         saveResponse(args.tts_wav, response)
     elif args.mode == 'cross_lingual':
         url = api + "/api/inference/cross-lingual"
-        payload={
+        payload = {
             'tts': args.tts_text,
         }
-        files=[('audio', ('prompt_audio.wav', open(args.prompt_wav,'rb'), 'application/octet-stream'))]
+        files = [('audio', ('prompt_audio.wav', open(args.prompt_wav, 'rb'), 'application/octet-stream'))]
         response = requests.request("POST", url, data=payload, files=files)
         saveResponse(args.tts_wav, response)
     else:
@@ -45,6 +47,7 @@ def main():
         response = requests.request("POST", url, data=payload)
         saveResponse(args.tts_wav, response)
     logging.info("Response save to {}", args.tts_wav)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

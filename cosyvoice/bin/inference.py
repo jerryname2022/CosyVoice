@@ -16,6 +16,7 @@ from __future__ import print_function
 
 import argparse
 import logging
+
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 import os
 
@@ -27,6 +28,7 @@ from tqdm import tqdm
 from cosyvoice.cli.model import CosyVoiceModel
 
 from cosyvoice.dataset.dataset import Dataset
+
 
 def get_args():
     parser = argparse.ArgumentParser(description='inference with your model')
@@ -66,7 +68,8 @@ def main():
     model = CosyVoiceModel(configs['llm'], configs['flow'], configs['hift'])
     model.load(args.llm_model, args.flow_model, args.hifigan_model)
 
-    test_dataset = Dataset(args.prompt_data, data_pipeline=configs['data_pipeline'], mode='inference', shuffle=False, partition=False, tts_file=args.tts_text, prompt_utt2data=args.prompt_utt2data)
+    test_dataset = Dataset(args.prompt_data, data_pipeline=configs['data_pipeline'], mode='inference', shuffle=False,
+                           partition=False, tts_file=args.tts_text, prompt_utt2data=args.prompt_utt2data)
     test_data_loader = DataLoader(test_dataset, batch_size=None, num_workers=0)
 
     del configs
@@ -97,7 +100,8 @@ def main():
                 model_input = {'text': tts_text_token, 'text_len': tts_text_token_len,
                                'prompt_text': text_token, 'prompt_text_len': text_token_len,
                                'llm_prompt_speech_token': speech_token, 'llm_prompt_speech_token_len': speech_token_len,
-                               'flow_prompt_speech_token': speech_token, 'flow_prompt_speech_token_len': speech_token_len,
+                               'flow_prompt_speech_token': speech_token,
+                               'flow_prompt_speech_token_len': speech_token_len,
                                'prompt_speech_feat': speech_feat, 'prompt_speech_feat_len': speech_feat_len,
                                'llm_embedding': utt_embedding, 'flow_embedding': utt_embedding}
             model_output = model.inference(**model_input)
