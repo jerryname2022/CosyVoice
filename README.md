@@ -4,6 +4,34 @@
 
 For `SenseVoice`, visit [SenseVoice repo](https://github.com/FunAudioLLM/SenseVoice) and [SenseVoice space](https://www.modelscope.cn/studios/iic/SenseVoice).
 
+## Roadmap
+
+- [x] 2024/07
+
+    - [x] Flow matching training support
+    - [x] WeTextProcessing support when ttsfrd is not avaliable
+    - [x] Fastapi server and client
+
+- [x] 2024/08
+
+    - [x] Repetition Aware Sampling(RAS) inference for llm stability
+    - [x] Streaming inference mode support, including kv cache and sdpa for rtf optimization
+
+- [x] 2024/09
+
+    - [x] 25hz cosyvoice base model
+    - [x] 25hz cosyvoice voice conversion model
+
+- [ ] TBD
+
+    - [ ] 25hz llama based llm model which supports lora finetune
+    - [ ] Support more instruction mode
+    - [ ] Voice conversion
+    - [ ] Music generation
+    - [ ] Training script sample based on Mandarin
+    - [ ] CosyVoice-500M trained with more multi-lingual data
+    - [ ] More...
+
 ## Install
 
 **Clone and install**
@@ -43,6 +71,7 @@ If you are expert in this field, and you are only interested in training your ow
 # SDK模型下载
 from modelscope import snapshot_download
 snapshot_download('iic/CosyVoice-300M', local_dir='pretrained_models/CosyVoice-300M')
+snapshot_download('iic/CosyVoice-300M-25Hz', local_dir='pretrained_models/CosyVoice-300M-25Hz')
 snapshot_download('iic/CosyVoice-300M-SFT', local_dir='pretrained_models/CosyVoice-300M-SFT')
 snapshot_download('iic/CosyVoice-300M-Instruct', local_dir='pretrained_models/CosyVoice-300M-Instruct')
 snapshot_download('iic/CosyVoice-ttsfrd', local_dir='pretrained_models/CosyVoice-ttsfrd')
@@ -52,6 +81,7 @@ snapshot_download('iic/CosyVoice-ttsfrd', local_dir='pretrained_models/CosyVoice
 # git模型下载，请确保已安装git lfs
 mkdir -p pretrained_models
 git clone https://www.modelscope.cn/iic/CosyVoice-300M.git pretrained_models/CosyVoice-300M
+git clone https://www.modelscope.cn/iic/CosyVoice-300M-25Hz.git pretrained_models/CosyVoice-300M-25Hz
 git clone https://www.modelscope.cn/iic/CosyVoice-300M-SFT.git pretrained_models/CosyVoice-300M-SFT
 git clone https://www.modelscope.cn/iic/CosyVoice-300M-Instruct.git pretrained_models/CosyVoice-300M-Instruct
 git clone https://www.modelscope.cn/iic/CosyVoice-ttsfrd.git pretrained_models/CosyVoice-ttsfrd
@@ -86,23 +116,29 @@ import torchaudio
 cosyvoice = CosyVoice('pretrained_models/CosyVoice-300M-SFT')
 # sft usage
 print(cosyvoice.list_avaliable_spks())
-output = cosyvoice.inference_sft('你好，我是通义生成式语音大模型，请问有什么可以帮您的吗？', '中文女')
-torchaudio.save('sft.wav', output['tts_speech'], 22050)
+# change stream=True for chunk stream inference
+for i, j in enumerate(cosyvoice.inference_sft('你好，我是通义生成式语音大模型，请问有什么可以帮您的吗？', '中文女', stream=False)):
+    torchaudio.save('sft_{}.wav'.format(i), j['tts_speech'], 22050)
 
-cosyvoice = CosyVoice('pretrained_models/CosyVoice-300M')
+cosyvoice = CosyVoice('pretrained_models/CosyVoice-300M-25Hz') # or change to pretrained_models/CosyVoice-300M for 50Hz inference
 # zero_shot usage, <|zh|><|en|><|jp|><|yue|><|ko|> for Chinese/English/Japanese/Cantonese/Korean
 prompt_speech_16k = load_wav('zero_shot_prompt.wav', 16000)
-output = cosyvoice.inference_zero_shot('收到好友从远方寄来的生日礼物，那份意外的惊喜与深深的祝福让我心中充满了甜蜜的快乐，笑容如花儿般绽放。', '希望你以后能够做的比我还好呦。', prompt_speech_16k)
-torchaudio.save('zero_shot.wav', output['tts_speech'], 22050)
+for i, j in enumerate(cosyvoice.inference_zero_shot('收到好友从远方寄来的生日礼物，那份意外的惊喜与深深的祝福让我心中充满了甜蜜的快乐，笑容如花儿般绽放。', '希望你以后能够做的比我还好呦。', prompt_speech_16k, stream=False)):
+    torchaudio.save('zero_shot_{}.wav'.format(i), j['tts_speech'], 22050)
 # cross_lingual usage
 prompt_speech_16k = load_wav('cross_lingual_prompt.wav', 16000)
-output = cosyvoice.inference_cross_lingual('<|en|>And then later on, fully acquiring that company. So keeping management in line, interest in line with the asset that\'s coming into the family is a reason why sometimes we don\'t buy the whole thing.', prompt_speech_16k)
-torchaudio.save('cross_lingual.wav', output['tts_speech'], 22050)
+for i, j in enumerate(cosyvoice.inference_cross_lingual('<|en|>And then later on, fully acquiring that company. So keeping management in line, interest in line with the asset that\'s coming into the family is a reason why sometimes we don\'t buy the whole thing.', prompt_speech_16k, stream=False)):
+    torchaudio.save('cross_lingual_{}.wav'.format(i), j['tts_speech'], 22050)
+# vc usage
+prompt_speech_16k = load_wav('zero_shot_prompt.wav', 16000)
+source_speech_16k = load_wav('cross_lingual_prompt.wav', 16000)
+for i, j in enumerate(cosyvoice.inference_vc(source_speech_16k, prompt_speech_16k, stream=False)):
+    torchaudio.save('vc_{}.wav'.format(i), j['tts_speech'], 22050)
 
 cosyvoice = CosyVoice('pretrained_models/CosyVoice-300M-Instruct')
 # instruct usage, support <laughter></laughter><strong></strong>[laughter][breath]
-output = cosyvoice.inference_instruct('在面对挑战时，他展现了非凡的<strong>勇气</strong>与<strong>智慧</strong>。', '中文男', 'Theo \'Crimson\', is a fiery, passionate rebel leader. Fights with fervor for justice, but struggles with impulsiveness.')
-torchaudio.save('instruct.wav', output['tts_speech'], 22050)
+for i, j in enumerate(cosyvoice.inference_instruct('在面对挑战时，他展现了非凡的<strong>勇气</strong>与<strong>智慧</strong>。', '中文男', 'Theo \'Crimson\', is a fiery, passionate rebel leader. Fights with fervor for justice, but struggles with impulsiveness.', stream=False)):
+    torchaudio.save('instruct_{}.wav'.format(i), j['tts_speech'], 22050)
 ```
 
 **Start web demo**
@@ -133,10 +169,10 @@ docker build -t cosyvoice:v1.0 .
 # change iic/CosyVoice-300M to iic/CosyVoice-300M-Instruct if you want to use instruct inference
 # for grpc usage
 docker run -d --runtime=nvidia -p 50000:50000 cosyvoice:v1.0 /bin/bash -c "cd /opt/CosyVoice/CosyVoice/runtime/python/grpc && python3 server.py --port 50000 --max_conc 4 --model_dir iic/CosyVoice-300M && sleep infinity"
-python3 grpc/client.py --port 50000 --mode <sft|zero_shot|cross_lingual|instruct>
+cd grpc && python3 client.py --port 50000 --mode <sft|zero_shot|cross_lingual|instruct>
 # for fastapi usage
-docker run -d --runtime=nvidia -p 50000:50000 cosyvoice:v1.0 /bin/bash -c "cd /opt/CosyVoice/CosyVoice/runtime/python/fastapi && MODEL_DIR=iic/CosyVoice-300M fastapi dev --port 50000 server.py && sleep infinity"
-python3 fastapi/client.py --port 50000 --mode <sft|zero_shot|cross_lingual|instruct>
+docker run -d --runtime=nvidia -p 50000:50000 cosyvoice:v1.0 /bin/bash -c "cd /opt/CosyVoice/CosyVoice/runtime/python/fastapi && python3 server.py --port 50000 --model_dir iic/CosyVoice-300M && sleep infinity"
+cd fastapi && python3 client.py --port 50000 --mode <sft|zero_shot|cross_lingual|instruct>
 ```
 
 ## Discussion & Communication

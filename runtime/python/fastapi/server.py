@@ -1,10 +1,16 @@
-# Set inference model
-# export MODEL_DIR=pretrained_models/CosyVoice-300M-Instruct
-# For development
-# fastapi dev --port 6006 fastapi_server.py
-# For production deployment
-# fastapi run --port 6006 fastapi_server.py
-
+# Copyright (c) 2024 Alibaba Inc (authors: Xiang Lyu)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import os
 import sys
 import io, time
@@ -57,77 +63,42 @@ app.add_middleware(
     allow_headers=["*"])  # 允许跨域的headers，可以用来鉴别来源等作用。
 
 
-def buildResponse(output):
-    buffer = io.BytesIO()
-    torchaudio.save(buffer, output, 22050, format="wav")
-    buffer.seek(0)
-    return Response(content=buffer.read(-1), media_type="audio/wav")
+@app.get("/inference_sft")
+async def inference_sft(tts_text: str = Form(), spk_id: str = Form()):
+    model_output = cosyvoice.inference_sft(tts_text, spk_id)
+    return StreamingResponse(generate_data(model_output))
 
 
-@app.post("/api/inference/sft")
-@app.get("/api/inference/sft")
-async def sft(tts: str = Form(), role: str = Form()):
-    start = time.process_time()
-    output = app.cosyvoice.inference_sft(tts, role)
-    end = time.process_time()
-    logging.info("infer time is {} seconds", end - start)
-    return buildResponse(output['tts_speech'])
+@app.get("/inference_zero_shot")
+async def inference_zero_shot(tts_text: str = Form(), prompt_text: str = Form(), prompt_wav: UploadFile = File()):
+    prompt_speech_16k = load_wav(prompt_wav.file, 16000)
+    model_output = cosyvoice.inference_zero_shot(tts_text, prompt_text, prompt_speech_16k)
+    return StreamingResponse(generate_data(model_output))
 
 
-@app.post("/api/inference/zero-shot")
-async def zeroShot(tts: str = Form(), prompt: str = Form(), audio: UploadFile = File()):
-    start = time.process_time()
-    prompt_speech = load_wav(audio.file, 16000)
-    prompt_audio = (prompt_speech.numpy() * (2 ** 15)).astype(np.int16).tobytes()
-    prompt_speech_16k = torch.from_numpy(np.array(np.frombuffer(prompt_audio, dtype=np.int16))).unsqueeze(dim=0)
-    prompt_speech_16k = prompt_speech_16k.float() / (2 ** 15)
-
-    output = app.cosyvoice.inference_zero_shot(tts, prompt, prompt_speech_16k)
-    end = time.process_time()
-    logging.info("infer time is {} seconds", end - start)
-    return buildResponse(output['tts_speech'])
+@app.get("/inference_cross_lingual")
+async def inference_cross_lingual(tts_text: str = Form(), prompt_wav: UploadFile = File()):
+    prompt_speech_16k = load_wav(prompt_wav.file, 16000)
+    model_output = cosyvoice.inference_cross_lingual(tts_text, prompt_speech_16k)
+    return StreamingResponse(generate_data(model_output))
 
 
-@app.post("/api/inference/cross-lingual")
-async def crossLingual(tts: str = Form(), audio: UploadFile = File()):
-    start = time.process_time()
-    prompt_speech = load_wav(audio.file, 16000)
-    prompt_audio = (prompt_speech.numpy() * (2 ** 15)).astype(np.int16).tobytes()
-    prompt_speech_16k = torch.from_numpy(np.array(np.frombuffer(prompt_audio, dtype=np.int16))).unsqueeze(dim=0)
-    prompt_speech_16k = prompt_speech_16k.float() / (2 ** 15)
-
-    output = app.cosyvoice.inference_cross_lingual(tts, prompt_speech_16k)
-    end = time.process_time()
-    logging.info("infer time is {} seconds", end - start)
-    return buildResponse(output['tts_speech'])
+@app.get("/inference_instruct")
+async def inference_instruct(tts_text: str = Form(), spk_id: str = Form(), instruct_text: str = Form()):
+    model_output = cosyvoice.inference_instruct(tts_text, spk_id, instruct_text)
+    return StreamingResponse(generate_data(model_output))
 
 
-@app.post("/api/inference/instruct")
-@app.get("/api/inference/instruct")
-async def instruct(tts: str = Form(), role: str = Form(), instruct: str = Form()):
-    start = time.process_time()
-    output = app.cosyvoice.inference_instruct(tts, role, instruct)
-    end = time.process_time()
-    logging.info("infer time is {} seconds", end - start)
-    return buildResponse(output['tts_speech'])
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--port',
+                        type=int,
+                        default=50000)
+    parser.add_argument('--model_dir',
+                        type=str,
+                        default='iic/CosyVoice-300M',
+                        help='local path or modelscope repo id')
+    args = parser.parse_args()
+    cosyvoice = CosyVoice(args.model_dir)
+    uvicorn.run(app, host="0.0.0.0", port=args.port)
 
-
-@app.get("/api/roles")
-async def roles():
-    return {"roles": app.cosyvoice.list_avaliable_spks()}
-
-
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    return """
-    <!DOCTYPE html>
-    <html lang=zh-cn>
-        <head>
-            <meta charset=utf-8>
-            <title>Api information</title>
-        </head>
-        <body>
-            Get the supported tones from the Roles API first, then enter the tones and textual content in the TTS API for synthesis. <a href='./docs'>Documents of API</a>
-        </body>
-    </html>
-    """

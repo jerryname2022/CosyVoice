@@ -27,6 +27,9 @@ logging.getLogger('matplotlib').setLevel(logging.WARNING)
 import grpc
 import torch
 import numpy as np
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append('{}/../../..'.format(ROOT_DIR))
+sys.path.append('{}/../../../third_party/Matcha-TTS'.format(ROOT_DIR))
 from cosyvoice.cli.cosyvoice import CosyVoice
 
 logging.basicConfig(level=logging.DEBUG,
@@ -63,9 +66,11 @@ class CosyVoiceServiceImpl(cosyvoice_pb2_grpc.CosyVoiceServicer):
                                                              request.instruct_request.instruct_text)
 
         logging.info('send inference response')
-        response = cosyvoice_pb2.Response()
-        response.tts_audio = (model_output['tts_speech'].numpy() * (2 ** 15)).astype(np.int16).tobytes()
-        return response
+        for i in model_output:
+            response = cosyvoice_pb2.Response()
+            response.tts_audio = (i['tts_speech'].numpy() * (2 ** 15)).astype(np.int16).tobytes()
+            yield response
+
 
 
 def main():
