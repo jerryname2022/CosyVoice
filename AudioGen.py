@@ -7,7 +7,7 @@ from utils.file_utils import read_lines, write_to_file
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
 ROOT_DIR = "D:/CosyVoice"
-modelPath = '{}/pretrained_models/CosyVoice-300M'.format(ROOT_DIR)
+modelPath = '{}/pretrained_models/CosyVoice-300M-25Hz'.format(ROOT_DIR)
 matchaTTSPath = '{}/third_party/Matcha-TTS'.format(ROOT_DIR)
 
 sys.path.append(ROOT_DIR)
@@ -29,8 +29,14 @@ def requestSFT(ttsText, spkID, savePath):
 
 def requestZeroShot(ttsText, promptText, promptWav, savePath):
     prompt_speech_16k = load_wav(promptWav, 16000)
-    output = cosyvoice.inference_zero_shot(ttsText, promptText, prompt_speech_16k)
-    torchaudio.save(savePath, output['tts_speech'], 22050)
+    outputs = cosyvoice.inference_zero_shot(ttsText, promptText, prompt_speech_16k, speed=1.2)
+
+    count = 0
+    for output in outputs:
+        torchaudio.save(savePath, output['tts_speech'], 22050)
+        count += 1
+
+    # torchaudio.save(savePath, output['tts_speech'], 22050)
 
 
 def requestCrossLingual(ttsText, promptWav, savePath):

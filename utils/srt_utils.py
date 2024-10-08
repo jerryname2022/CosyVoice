@@ -68,11 +68,20 @@ def srt_texts_times(srtFile):
     times = []
     texts = []
 
+    srtTimes = []
+    srtTexts = []
+    maxCount = 0
+
     for subtitle in subtitles:
         text = subtitle['text']
         start = float(parse_srt_time(subtitle['start']))
         end = float(parse_srt_time(subtitle['end']))
         duration = end - start
+
+        srtTimes.append("{}:{}".format(start, end))
+        srtTexts.append(text.strip())
+
+        maxCount = max(maxCount, len(text.strip()))
 
         clear = ""
         for char in text:
@@ -87,7 +96,7 @@ def srt_texts_times(srtFile):
                 texts.append(char)
                 durationFlag += charDuration
 
-    return texts, times
+    return texts, times, srtTexts, srtTimes, maxCount
 
 
 def srt_texts(subtitles):

@@ -21,7 +21,6 @@ from cosyvoice.cli.model import CosyVoiceModel
 from cosyvoice.utils.file_utils import logging
 
 
-
 class CosyVoice:
 
     def __init__(self, model_dir, load_jit=True, load_onnx=False):

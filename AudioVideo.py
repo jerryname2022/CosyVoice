@@ -1,7 +1,9 @@
+import os
+
 from moviepy.editor import *
-# import numpy as np
-# import cupy as cp
-import torch
+import numpy as np
+import cupy as cp
+# import torch
 import cv2, math, random
 from utils.file_utils import read_lines
 from utils.srt_utils import parse_srt_time, srt_texts_times
@@ -12,34 +14,152 @@ from itertools import combinations
 
 
 class FrameClip(VideoClip):
-    def __init__(self, audioFile, srtFile, size=(1920, 1080), fps=30):
+    def __init__(self, audioFile, srtFile, size=(1920, 1080), fps=30, coverPath=None, musicPath=None,
+                 fontColor=(0, 0, 0, 0xFF),
+                 fontPath=f"D:\\CosyVoice\\asset\\TW-Kai-98_1.ttf"):
         super().__init__()
 
-        texts, times = srt_texts_times(srtFile)
+        audio = AudioFileClip(audioFile)
+        if os.path.exists(musicPath):
+            music = AudioFileClip(musicPath)
+            music = music.fx(afx.audio_loop, duration=audio.duration)
+            audio = CompositeAudioClip([audio, music.volumex(0.2)])
 
+        self.backgroundColor = (0xf2, 0xf4, 0xf5)
+        texts, times, srtTexts, srtTimes, maxCount = srt_texts_times(srtFile)
         self.audioFile = audioFile
-        self.audio = AudioFileClip(audioFile)
-        self.duration = self.audio.duration
+
+        if os.path.exists(coverPath):
+            image = Image.open(coverPath).convert('RGB')
+            self.coverClip = ImageClip(np.array(image))
+
+        self.audio = audio
+        self.duration = audio.duration
         self.fps = fps
         self.size = size
         self.srtFile = srtFile
         self.texts = texts
         self.times = times
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.srtTexts = srtTexts
+        self.srtTimes = srtTimes
+        self.maxCount = maxCount
+        self.fontColor = fontColor
+        self.fontPath = fontPath
+
+        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.setup_srt()
 
         print("texts times ... ", len(texts), len(times))
 
-    def create_frame(self, width, height, color, opacity):
+    def font_Size(self, image, imageDraw, textCount, fontPath, rate=0.8):
+        width, height = image.size
+        maxWidth = int(rate * width)
+        maxHeight = int(rate * height)
+
+        calculateTexts = ""
+        for index in range(textCount + 1):
+            calculateTexts += "趣"
+
+        calculateSize = 10
+
+        while True:
+            # left, top, right, bottom = imageDraw.textbbox((0, 0), calculateTexts,
+            #                                               font=ImageFont.truetype(fontPath, size=calculateSize))
+            # textWidth = right - left
+            # textHeight = bottom - top
+            textWidth, textHeight = imageDraw.textsize(calculateTexts,
+                                                       font=ImageFont.truetype(fontPath, size=calculateSize))
+            calculateSize += 2
+
+            if (textWidth > maxWidth or textHeight > maxHeight):
+                break
+
+        return calculateSize
+
+    def setup_srt(self):
+        width = self.size[0]
+        height = int(self.size[1] * 0.15)
+
+        margin = int(height * 0.1)
+
+        color = (self.backgroundColor[0], self.backgroundColor[1],
+                 self.backgroundColor[2], 0x00)
+
+        image = Image.new('RGBA', (width, height), color=color)
+        imageDraw = ImageDraw.Draw(image)
+        fontSize = self.font_Size(image, imageDraw, self.maxCount, self.fontPath, rate=0.8)
+
+        colorOffset = 15
+        fillColor = (self.backgroundColor[0] - colorOffset, self.backgroundColor[1] - colorOffset,
+                     self.backgroundColor[2] - colorOffset)
+
+        srtTextClips = []
+        for text in self.srtTexts:
+            textWidth, textHeight = imageDraw.textsize(text,
+                                                       font=ImageFont.truetype(self.fontPath, size=fontSize))
+
+            image = Image.new('RGBA', (textWidth + 2 * margin, textHeight + 2 * margin), color=color)
+            imageDraw = ImageDraw.Draw(image)
+            x = (image.size[0] - textWidth) // 2
+            y = (image.size[1] - textHeight) // 2
+
+            imageDraw.rectangle([x - margin, y - margin, x + textWidth + margin, y + textHeight + margin],
+                                fill=fillColor)
+
+            imageDraw.text((x, y), text, self.fontColor, font=ImageFont.truetype(self.fontPath, size=fontSize))
+            textClip = ImageClip(np.array(image))
+
+            srtTextClips.append(textClip)
+
+            image = Image.new('RGBA', (width, height), color=color)
+            imageDraw = ImageDraw.Draw(image)
+
+        self.srtTextClips = srtTextClips
+
+    def text_index(self, t):
+        index = 0
+        for item in self.times:
+            ftime = float(item)
+            if ftime > t:
+                return index
+            if index < (len(self.times) - 1):
+                index += 1
+        return index
+
+    def srt_index(self, t):
+        index = -1
+        for item in self.srtTimes:
+            ft, tt = float(item.split(":")[0]), float(item.split(":")[1])
+            if ft >= t and t <= tt:
+                return index
+            if index < (len(self.srtTimes) - 1):
+                index += 1
+
+        return index
+
+    def srt_frame(self, t):
+        srtIndex = self.srt_index(t)
+        if srtIndex >= 0:
+            textClip = self.srtTextClips[srtIndex]
+
+            frame = cp.array(textClip.get_frame(0), dtype=cp.uint8)
+            return frame
+        return None
+
+    def create_frame(self, width, height, color):
         # Create a mask frame with the specified color and opacity
-        mask_frame = torch.zeros((height, width, 3), dtype=torch.uint8, device=self.device)
-        # mask_frame[:, :, :3] = color  # Set RGB color
-        mask_frame[:, :, 0] = color[0]
-        mask_frame[:, :, 1] = color[1]
-        mask_frame[:, :, 2] = color[2]
-        # mask_frame[:, :, 3] = int(opacity * 255)  # Set alpha channel
-        return mask_frame
+        newFrame = cp.zeros((height, width, 3), dtype=cp.uint8)
+        # newFrame = torch.zeros((height, width, 3), device=self.device, dtype=torch.uint8)
+        # newFrame = np.zeros((height, width, 3), dtype=np.uint8)
+        # newFrame[:, :, :3] = color  # Set RGB color
+        newFrame[:, :, 0] = color[0]
+        newFrame[:, :, 1] = color[1]
+        newFrame[:, :, 2] = color[2]
+        return newFrame
 
     def location(self, background, frame, x, y, endY=True, endX=True, opacity=1):
+
+        # print(background.shape, frame.shape)
 
         width, height = background.shape[1], background.shape[0]
         fWidth, fHeight = frame.shape[1], frame.shape[0]
@@ -69,11 +189,11 @@ class FrameClip(VideoClip):
 
     def alpha_in(self, background, frame, ctime, duration=0.8):
 
-        width, height = background.shape[0], background.shape[1]
-        fWidth, fHeight = frame.shape[0], frame.shape[1]
+        w, h = background.shape[1], background.shape[0]
+        fw, fh = frame.shape[1], frame.shape[0]
 
-        diffW = width - fWidth
-        diffH = height - fHeight
+        diffW = w - fw
+        diffH = h - fh
 
         x = diffW // 2
         y = diffH // 2
@@ -185,6 +305,45 @@ class FrameClip(VideoClip):
 
         self.location(background, frame, x, y, endY=False)
 
+    def zoom(self, background, frame, toX, toY, ctime, duration=0.8, zoom=0.2):
+        step = 0.000000001
+        count = 1 / step
+
+        w, h = background.shape[1], background.shape[0]
+        fw, fh = frame.shape[1], frame.shape[0]
+
+        ftime = count - (count * ctime / duration)
+
+        quart = self.ease_quart(ftime)
+        total = self.ease_quart(count)
+
+        progress = (1 - quart / total)
+        scale = 1 + zoom * progress
+        sw, sh = int(fw * scale), int(fh * scale)
+
+        if sw % 2 != 0:
+            sw += 1
+
+        if sh % 2 != 0:
+            sh += 1
+
+        cx = toX + fw // 2
+        cy = toY + fh // 2
+
+        # factors = (sh / fh, sw / fw, 1)  # (H, W, C)
+        # zoomFrame = cp.array(ndimage.zoom(cp.asnumpy(frame), factors, order=3))  # 使用三次插值
+        # # zoomFrame = np.array(ndimage.zoom(frame, factors, order=3))  # 使用三次插值
+        # frame = zoomFrame
+
+        # cx = tox + zw // 2
+        toX = cx - sw // 2
+        toY = cy - sh // 2
+
+        x = toX
+        y = toY
+
+        self.location(background, frame, x, y, endY=False)
+
     def right_out(self, background, frame, fromX, fromY, ctime, duration=0.8):
         step = 0.000000001
         count = 1 / step
@@ -268,26 +427,18 @@ class FrameClip(VideoClip):
         self.location(background, frame, x, y, endY=False)
 
     def is_image(self, name):
-        images = ('.bmp', '.dib', '.png', '.jpg', '.jpeg', '.pbm', '.pgm', '.ppm', '.tif', '.tiff')
+        images = ('.bmp', '.dib', '.png', '.jpg', '.jpeg', '.pbm', '.pgm', '.ppm', '.tif', '.tiff', '.jfif')
         return name.lower().endswith(images)
-
-    def text_index(self, t):
-        index = 0
-        for item in self.times:
-            ftime = float(item)
-            if ftime > t:
-                return index
-            if index < (len(self.times) - 1):
-                index += 1
-        return index
 
     def ease_quart(self, x):
         return 1 - math.pow(1 - x, 5)
 
 
 class FileClip(FrameClip):
-    def __init__(self, textsFile, filesPath, audioFile, srtFile, size=(1920, 1080), fps=30):
-        super().__init__(audioFile=audioFile, srtFile=srtFile, size=size, fps=fps)
+    def __init__(self, textsFile, filesPath, audioFile, srtFile, size=(1920, 1080), fps=30, coverPath=None,
+                 musicPath=None):
+        super().__init__(audioFile=audioFile, srtFile=srtFile, size=size, fps=fps, coverPath=coverPath,
+                         musicPath=musicPath)
 
         self.setup_texts(textsFile)
         self.setup_medias(filesPath)
@@ -358,10 +509,10 @@ class FileClip(FrameClip):
                 row = 1
                 col = 2
         elif size > 2:
-            row = 2
-            col = size // 2
+            col = 2
+            row = size // col
             if (row * col) < size:
-                col += 1
+                row += 1
             if self.size[1] > self.size[0]:
                 tmp = row
                 row = col
@@ -383,35 +534,41 @@ class FileClip(FrameClip):
             parts = line.split(" --> ")
             if len(parts) > 0:
                 endTags = parts[1].split(" ")
+                tag = ""
                 if len(endTags) > 1:
                     tag = endTags[1].strip()
 
-                    if len(tag) > 0 and tag == lastTag:
-                        flag += 1
-                        lineTags[list(lineTags.keys())[-1]] = flag
-                    else:
-                        lineTags[i] = flag
-                        flag = 1
+                if len(tag) > 0 and tag == lastTag:
+                    flag += 1
+                else:
+                    if flag > 1:
+                        lineTags[i - 1] = flag
+                    flag = 1
 
-                    lastTag = tag
+                lastTag = tag
 
-        if len(lineTags) > 0:
-            lineTags[list(lineTags.keys())[-1]] = flag
+        if flag > 1:
+            lineTags[len(lines) - 1] = flag
 
-        count = 1
+        # print(len(lineTags), lineTags)
+        keys = list(lineTags.keys())
+        for key in keys:
+            count = lineTags[key]
+            for i in range(count):
+                lineTags[key - i] = count
+
+        # print(len(lineTags), lineTags)
         for i in range(len(lines)):
             exist = i in lineTags.keys()
             if not exist:
-                lineTags[i] = count
-            else:
-                count = lineTags[i]
+                lineTags[i] = 1
 
-        print(len(lineTags), lineTags)
+        # print(len(lineTags), lineTags)
 
         medias = []
         scenes = []
 
-        scene = random.randint(1, 4)
+        scene = lineTags[0]  # random.randint(1, 4)
         locations = list(range(scene))
         row, col = self.row_col(scene)
 
@@ -432,7 +589,8 @@ class FileClip(FrameClip):
                 isImage = self.is_image(filename)
 
                 if count >= scene:
-                    scene = random.randint(1, 4)
+                    scene = lineTags[i]  # random.randint(1, 4)
+
                     locations = list(range(scene))
                     row, col = self.row_col(scene)
 
@@ -455,7 +613,10 @@ class FileClip(FrameClip):
                 location = self.index_location(locationIndex, row=row, col=col)
 
                 if isImage:
-                    imageClip = ImageClip(videoPath, transparent=True)
+                    image = Image.open(videoPath).convert('RGB')
+                    imageClip = ImageClip(np.array(image))
+                    # imageClip = ImageClip(cp.asnumpy(image))
+                    # imageClip = ImageClip(np.array(image))
                     width, height = imageClip.size[0], imageClip.size[1]
                     scaleW = sceneWidth / width
                     scaleH = sceneHeight / height
@@ -501,98 +662,130 @@ class FileClip(FrameClip):
             audioDuration = audioEnd - audioStart
             ft = (t - audioStart) * fileDuration / audioDuration
 
-            frame = torch.tensor(videoClip.get_frame(ft), device=self.device, dtype=torch.uint8)
+            frame = cp.array(videoClip.get_frame(ft), dtype=cp.uint8)
+            # frame = np.array(videoClip.get_frame(ft), dtype=np.uint8)
+            # frame = torch.tensor(videoClip.get_frame(ft), device=self.device, dtype=torch.uint8)
 
-            return frame, (t - audioStart), audioDuration, mediaIn, mediaOut, location
+            return frame, (t - audioStart), audioDuration, mediaIn, mediaOut, location, isImage
 
         return None
 
     def make_frame(self, t):
-        textIndex = self.text_index(t)
-        lineIndex = int(self.textLines[textIndex])
 
         width, height = self.size[0], self.size[1]
-        color = (0xf2, 0xf4, 0xf5)
-        opacity = 1
-        background0 = self.create_frame(width, height, color, opacity)
-        background = self.create_frame(width, height, color, opacity)
+        color = self.backgroundColor
 
-        mediaIndex, mediaCount = self.scenes[lineIndex][0], self.scenes[lineIndex][1]
-        count = mediaIndex + 1
-        fromIndex = lineIndex - count
+        background0 = self.create_frame(width, height, color)
+        background = self.create_frame(width, height, color)
 
-        w, h = background.shape[1], background.shape[0]
+        if t <= 0.1 and self.coverClip is not None:
+            frame = cp.array(self.coverClip.get_frame(0), dtype=cp.uint8)
+            fw, fh = frame.shape[1], frame.shape[0]
+            offsetX = width - fw
+            offsetY = height - fh
+            x = offsetX // 2
+            y = offsetY // 2
+            self.location(background, frame, x, y)
+        else:
+            textIndex = self.text_index(t)
+            lineIndex = int(self.textLines[textIndex])
 
-        for i in range(count):
-            textLine = fromIndex + 1 + i
-            frame, ft, fd, mediaIn, mediaOut, location = self.file_frame(textLine, t)
-            fx, fy, itemWidth, itemHeight = location[0], location[1], location[2], location[3]
+            mediaIndex, mediaCount = self.scenes[lineIndex][0], self.scenes[lineIndex][1]
+            count = mediaIndex + 1
+            fromIndex = lineIndex - count
 
-            fWidth, fHeight = frame.shape[1], frame.shape[0]
-            offsetX = itemWidth - fWidth
-            offsetY = itemHeight - fHeight
-            x = fx + offsetX // 2
-            y = fy + offsetY // 2
+            # w, h = background.shape[1], background.shape[0]
 
-            inTime = 1.2
-            outTime = 1.0
+            for i in range(count):
+                textLine = fromIndex + 1 + i
+                frame, ft, fd, mediaIn, mediaOut, location, isImage = self.file_frame(textLine, t)
+                fx, fy, itemWidth, itemHeight = location[0], location[1], location[2], location[3]
 
-            if i == mediaIndex and ft < inTime:
-                # self.left_in(background, frame, x, y, ft, duration=inTime, move=False)
-                # self.right_in(background, frame, x, y, ft, duration=inTime, move=False)
-                # self.top_in(background, frame, x, y, ft, duration=inTime, move=False)
-                # self.bottom_in(background, frame, x, y, ft, duration=inTime, move=False)
+                fWidth, fHeight = frame.shape[1], frame.shape[0]
+                offsetX = itemWidth - fWidth
+                offsetY = itemHeight - fHeight
+                x = fx + offsetX // 2
+                y = fy + offsetY // 2
 
-                if mediaIn == 1:
-                    self.bottom_in(background, frame, x, y, ft, duration=inTime)
-                elif mediaIn == 2:
-                    self.top_in(background, frame, x, y, ft, duration=inTime)
-                elif mediaIn == 3:
-                    self.right_in(background, frame, x, y, ft, duration=inTime)
-                elif mediaIn == 4:
-                    self.left_in(background, frame, x, y, ft, duration=inTime)
-                elif mediaIn == 5:
-                    self.bottom_in(background, frame, x, y, ft, duration=inTime, move=False)
-                elif mediaIn == 6:
-                    self.top_in(background, frame, x, y, ft, duration=inTime, move=False)
-                elif mediaIn == 7:
-                    self.right_in(background, frame, x, y, ft, duration=inTime, move=False)
+                inTime = 1.2
+                outTime = 1.0
+
+                if i == mediaIndex and ft < inTime:
+                    # self.left_in(background, frame, x, y, ft, duration=inTime, move=False)
+                    # self.right_in(background, frame, x, y, ft, duration=inTime, move=False)
+                    # self.top_in(background, frame, x, y, ft, duration=inTime, move=False)
+                    # self.bottom_in(background, frame, x, y, ft, duration=inTime, move=False)
+
+                    if mediaIn == 1:
+                        self.bottom_in(background, frame, x, y, ft, duration=inTime)
+                    elif mediaIn == 2:
+                        self.top_in(background, frame, x, y, ft, duration=inTime)
+                    elif mediaIn == 3:
+                        self.right_in(background, frame, x, y, ft, duration=inTime)
+                    elif mediaIn == 4:
+                        self.left_in(background, frame, x, y, ft, duration=inTime)
+                    elif mediaIn == 5:
+                        self.bottom_in(background, frame, x, y, ft, duration=inTime, move=False)
+                    elif mediaIn == 6:
+                        self.top_in(background, frame, x, y, ft, duration=inTime, move=False)
+                    elif mediaIn == 7:
+                        self.right_in(background, frame, x, y, ft, duration=inTime, move=False)
+                    else:
+                        self.left_in(background, frame, x, y, ft, duration=inTime, move=False)
+                elif i == (mediaCount - 1) and ft > (fd - outTime):
+                    # self.right_out(background, frame, x, y, ft - (fd - outTime), duration=outTime)
+                    # self.left_out(background, frame, x, y, ft - (fd - outTime), duration=outTime)
+                    # self.top_out(background, frame, x, y, ft - (fd - outTime), duration=outTime)
+                    # self.bottom_out(background, frame, x, y, ft - (fd - outTime), duration=outTime)
+
+                    self.location(background, frame, x, y)
+                    frame = background
+                    background = background0
+                    x = 0
+                    y = 0
+
+                    ft = ft - (fd - outTime)
+                    if mediaIn == 1:
+                        self.bottom_out(background, frame, x, y, ft, duration=outTime)
+                    elif mediaIn == 2:
+                        self.top_out(background, frame, x, y, ft, duration=outTime)
+                    elif mediaIn == 3:
+                        self.right_out(background, frame, x, y, ft, duration=outTime)
+                    else:
+                        self.left_out(background, frame, x, y, ft, duration=outTime)
                 else:
-                    self.left_in(background, frame, x, y, ft, duration=inTime, move=False)
-            elif i == (mediaCount - 1) and ft > (fd - outTime):
-                # self.right_out(background, frame, x, y, ft - (fd - outTime), duration=outTime)
-                # self.left_out(background, frame, x, y, ft - (fd - outTime), duration=outTime)
-                # self.top_out(background, frame, x, y, ft - (fd - outTime), duration=outTime)
-                # self.bottom_out(background, frame, x, y, ft - (fd - outTime), duration=outTime)
+                    self.location(background, frame, x, y)
 
-                self.location(background, frame, x, y)
-                frame = background
-                background = background0
-                x = 0
-                y = 0
+            srtFrame = self.srt_frame(t)
+            if srtFrame is not None:
+                fWidth, fHeight = srtFrame.shape[1], srtFrame.shape[0]
+                offsetX = width - fWidth
+                x = offsetX // 2
+                y = height - int(fHeight * 1.1)
+                self.location(background, srtFrame, x, y, opacity=0.75)
 
-                if mediaIn == 1:
-                    self.bottom_out(background, frame, x, y, ft - (fd - outTime), duration=outTime)
-                elif mediaIn == 2:
-                    self.top_out(background, frame, x, y, ft - (fd - outTime), duration=outTime)
-                elif mediaIn == 3:
-                    self.right_out(background, frame, x, y, ft - (fd - outTime), duration=outTime)
-                else:
-                    self.left_out(background, frame, x, y, ft - (fd - outTime), duration=outTime)
-
-            else:
-                self.location(background, frame, x, y)
-
-        return background.cpu().numpy()
+        return background
+        # return background.cpu().numpy()
 
 
-audioPath = "E:\\douyin\\videos\\车床介绍2.wav"
-filesPath = "E:\\douyin\\videos\\车床介绍2.files"
-srtPath = "E:\\douyin\\videos\\车床介绍2.srt"
-textPath = "E:\\douyin\\videos\\车床介绍2.txt"
+musicPath = "E:\\douyin\\music.mp3"
 
-outputPath = "E:\\douyin\\videos\\车床介绍2.mp4"
+# audioPath = "E:\\douyin\\videos\\车床介绍.wav"
+# filesPath = "E:\\douyin\\videos\\车床介绍.files"
+# srtPath = "E:\\douyin\\videos\\车床介绍.srt"
+# textPath = "E:\\douyin\\videos\\车床介绍.txt"
+#
+# outputPath = "E:\\douyin\\videos\\车床介绍.mp4"
 
-videoClip = FileClip(textPath, filesPath, audioPath, srtPath)
-# videoClip.write_videofile(outputPath, codec='libx264', audio_codec='aac', preset="fast", threads=8,
-#                           ffmpeg_params=["-gpu", "cuda"])
+coverPath = "E:\\douyin\\章太炎\\章太炎封面.png"
+
+audioPath = "E:\\douyin\\章太炎\\天王晁盖-章太炎.wav"
+filesPath = "E:\\douyin\\章太炎\\天王晁盖-章太炎.files"
+srtPath = "E:\\douyin\\章太炎\\天王晁盖-章太炎.srt"
+textPath = "E:\\douyin\\章太炎\\天王晁盖-章太炎.txt"
+
+outputPath = "E:\\douyin\\章太炎\\天王晁盖-章太炎.mp4"
+
+videoClip = FileClip(textPath, filesPath, audioPath, srtPath, musicPath=musicPath, coverPath=coverPath)
+videoClip.write_videofile(outputPath, codec='libx264', audio_codec='aac', preset="fast", threads=4,
+                          ffmpeg_params=["-gpu", "cuda"])

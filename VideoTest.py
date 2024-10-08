@@ -340,8 +340,51 @@ def textsToPinyins(texts):
 # print(result0)
 # print(result1)
 
-for i in range(1):
-    print(i)
+# for i in range(1):
+#     print(i)
 # parts = "4.png".split(" --> ")
 #
 # print(parts)
+
+
+# import cupy as cp
+import numpy as np
+from scipy.ndimage import zoom
+
+# videoPath = "E:\\douyin\\章太炎\\周树人.jfif"
+# image = Image.open(videoPath).convert('RGB')
+# print("image", image.size)
+#
+# imageClip = ImageClip(np.array(image))
+# frame = np.array(imageClip.get_frame(0), dtype=np.uint8)
+# print("frame0", frame.shape)
+#
+# frame = np.array(imageClip.get_frame(0), dtype=np.uint8)
+# print("frame1", frame.shape)
+#
+# scale = 1.2
+# newW, newH = int(scale * frame.shape[1]), int(scale * frame.shape[0])
+# newSize = (newH, newW)
+#
+# # zoomFrame = np.resize(frame, newSize)  # (H, W, C)
+#
+# factors = (newH / frame.shape[0], newW / frame.shape[1], 1)  # (H, W, C)
+# zoomFrame = np.array(zoom(frame, factors, order=3))  # 使用三次插值
+#
+# print("zoomFrame", zoomFrame.shape)
+#
+# imageSave = Image.fromarray(zoomFrame)
+# imageSave.save('3.jpg')
+from moviepy.config import change_settings
+
+change_settings({"IMAGEMAGICK_BINARY": f"C:\\Program Files\\ImageMagick-7.1.1-Q16-HDRI\\magick.exe"})
+
+text = "他的条件是：将来中国派使到伦敦去的时候".strip()
+text2 = "  中西的关系是特别的。在鸦片战净以前，我们不肯给外国平等待遇".strip()
+
+fontPath = "D:\\CosyVoice\\asset\\TW-Kai-98_1.ttf"
+textClip = TextClip(text, font=fontPath, fontsize=48, color='white')
+textClip2 = TextClip(text2, font=fontPath, fontsize=48, color='white')
+
+print(textClip.size, textClip2.size)
+# (685, 56) (1072, 56)
