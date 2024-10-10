@@ -151,7 +151,7 @@ if __name__ == "__main__":
     # requestZeroShot(text, promptText, promptWav, savePath)
 
     # shitouji = "E:\\douyin\\videos\\车床介绍.txt"
-    shitouji = "C:\\Users\\Administrator\\Documents\\现代学林点将录\\天王晁盖-章太炎\\天王晁盖-章太炎.txt"
+    shitouji = "C:\\Users\\Administrator\\Documents\\现代学林点将录\\王国维\\玉麒麟卢俊义-王国维.txt"
 
     text2Voices(shitouji, promptName, promptText, promptWav)
 

@@ -3,7 +3,6 @@ import os
 from moviepy.editor import *
 import numpy as np
 import cupy as cp
-# import torch
 import cv2, math, random
 from utils.file_utils import read_lines
 from utils.srt_utils import parse_srt_time, srt_texts_times
@@ -13,17 +12,103 @@ from moviepy.video.fx.resize import resize
 from itertools import combinations
 
 
-class FrameClip(VideoClip):
+class BaseClip(VideoClip):
+    def __init__(self, duration, size=(1920, 1080), fps=30):
+        super().__init__()
+        self.duration = duration
+        self.fps = fps
+        self.size = size
+
+    def to_array(self, frame):
+        frame = cp.array(frame, dtype=cp.uint8)
+        return frame
+
+    def create_frame(self, width, height, color):
+        # Create a mask frame with the specified color and opacity
+        newFrame = cp.zeros((height, width, 3), dtype=cp.uint8)
+        # newFrame = torch.zeros((height, width, 3), device=self.device, dtype=torch.uint8)
+        # newFrame = np.zeros((height, width, 3), dtype=np.uint8)
+        # newFrame[:, :, :3] = color  # Set RGB color
+        newFrame[:, :, 0] = color[0]
+        newFrame[:, :, 1] = color[1]
+        newFrame[:, :, 2] = color[2]
+        return newFrame
+
+    def location(self, background, frame, x, y, endY=True, endX=True, opacity=1):
+
+        width, height = background.shape[1], background.shape[0]
+        fWidth, fHeight = frame.shape[1], frame.shape[0]
+
+        toX, toY = x + fWidth, y + fHeight
+
+        boxW = min(toX, width) - max(0, x)
+        boxH = min(toY, height) - max(0, y)
+
+        bx, by = max(0, x), max(0, y)
+        fx, fy = fWidth - boxW, fHeight - boxH
+
+        if not endX:
+            fx = 0
+
+        if not endY:
+            fy = 0
+
+        if boxW > 0 and boxH > 0:
+            alpha = opacity
+
+            background[by:by + boxH, bx:bx + boxW] = alpha * frame[fy:fy + boxH, fx:fx + boxW] + (
+                    1 - alpha) * background[by:by + boxH, bx:bx + boxW]
+
+
+class MediaScaleClip(BaseClip):
+    def __init__(self, mediaClip, scaleFrom, scaleTo, size=(1920, 1080), fps=30):
+        super().__init__(mediaClip.duration, size=size, fps=fps)
+        self.mediaClip = mediaClip
+        self.scaleFrom = scaleFrom
+        self.scaleTo = scaleTo
+
+    def make_frame(self, t):
+
+        # (scale - scaleFrom)  / (scaleTo - scaleFrom) = t /  duration
+        scale = t * (self.scaleTo - self.scaleFrom) / self.duration + self.scaleFrom
+
+        color = (0xf2, 0xf4, 0xf5)
+        width, height = self.size[0], self.size[1]
+        background = self.create_frame(width, height, color)
+
+        fh = int(scale * self.mediaClip.size[1])
+        fw = int(scale * self.mediaClip.size[0])
+
+        if fw % 2 != 0:
+            fw += 1
+
+        if fh % 2 != 0:
+            fh += 1
+
+        frame = self.to_array(resize(self.mediaClip, newsize=(fw, fh)).get_frame(t))
+
+        offsetX = width - frame.shape[1]
+        offsetY = height - frame.shape[0]
+
+        x = offsetX // 2
+        y = offsetY // 2
+
+        self.location(background, frame, x, y)
+        return background
+
+
+class FrameClip(BaseClip):
     def __init__(self, audioFile, srtFile, size=(1920, 1080), fps=30, coverPath=None, musicPath=None,
                  fontColor=(0, 0, 0, 0xFF),
                  fontPath=f"D:\\CosyVoice\\asset\\TW-Kai-98_1.ttf"):
-        super().__init__()
 
         audio = AudioFileClip(audioFile)
         if os.path.exists(musicPath):
             music = AudioFileClip(musicPath)
             music = music.fx(afx.audio_loop, duration=audio.duration)
-            audio = CompositeAudioClip([audio, music.volumex(0.2)])
+            audio = CompositeAudioClip([audio.volumex(1.2), music.volumex(0.1)])
+
+        super().__init__(audio.duration, size=size, fps=fps)
 
         self.backgroundColor = (0xf2, 0xf4, 0xf5)
         texts, times, srtTexts, srtTimes, maxCount = srt_texts_times(srtFile)
@@ -34,9 +119,6 @@ class FrameClip(VideoClip):
             self.coverClip = ImageClip(np.array(image))
 
         self.audio = audio
-        self.duration = audio.duration
-        self.fps = fps
-        self.size = size
         self.srtFile = srtFile
         self.texts = texts
         self.times = times
@@ -46,7 +128,6 @@ class FrameClip(VideoClip):
         self.fontColor = fontColor
         self.fontPath = fontPath
 
-        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.setup_srt()
 
         print("texts times ... ", len(texts), len(times))
@@ -146,46 +227,46 @@ class FrameClip(VideoClip):
             return frame
         return None
 
-    def create_frame(self, width, height, color):
-        # Create a mask frame with the specified color and opacity
-        newFrame = cp.zeros((height, width, 3), dtype=cp.uint8)
-        # newFrame = torch.zeros((height, width, 3), device=self.device, dtype=torch.uint8)
-        # newFrame = np.zeros((height, width, 3), dtype=np.uint8)
-        # newFrame[:, :, :3] = color  # Set RGB color
-        newFrame[:, :, 0] = color[0]
-        newFrame[:, :, 1] = color[1]
-        newFrame[:, :, 2] = color[2]
-        return newFrame
-
-    def location(self, background, frame, x, y, endY=True, endX=True, opacity=1):
-
-        # print(background.shape, frame.shape)
-
-        width, height = background.shape[1], background.shape[0]
-        fWidth, fHeight = frame.shape[1], frame.shape[0]
-
-        toX, toY = x + fWidth, y + fHeight
-
-        boxW = min(toX, width) - max(0, x)
-        boxH = min(toY, height) - max(0, y)
-
-        bx, by = max(0, x), max(0, y)
-        fx, fy = fWidth - boxW, fHeight - boxH
-
-        if not endX:
-            fx = 0
-
-        if not endY:
-            fy = 0
-
-        if boxW > 0 and boxH > 0:
-            alpha = opacity
-
-            # background[bx:bx + boxW, by:by + boxH] = alpha * frame[fx:fx + boxW, fy:fy + boxH] + (
-            #         1 - alpha) * background[bx:bx + boxW, by:by + boxH]
-
-            background[by:by + boxH, bx:bx + boxW] = alpha * frame[fy:fy + boxH, fx:fx + boxW] + (
-                    1 - alpha) * background[by:by + boxH, bx:bx + boxW]
+    # def create_frame(self, width, height, color):
+    #     # Create a mask frame with the specified color and opacity
+    #     newFrame = cp.zeros((height, width, 3), dtype=cp.uint8)
+    #     # newFrame = torch.zeros((height, width, 3), device=self.device, dtype=torch.uint8)
+    #     # newFrame = np.zeros((height, width, 3), dtype=np.uint8)
+    #     # newFrame[:, :, :3] = color  # Set RGB color
+    #     newFrame[:, :, 0] = color[0]
+    #     newFrame[:, :, 1] = color[1]
+    #     newFrame[:, :, 2] = color[2]
+    #     return newFrame
+    #
+    # def location(self, background, frame, x, y, endY=True, endX=True, opacity=1):
+    #
+    #     # print(background.shape, frame.shape)
+    #
+    #     width, height = background.shape[1], background.shape[0]
+    #     fWidth, fHeight = frame.shape[1], frame.shape[0]
+    #
+    #     toX, toY = x + fWidth, y + fHeight
+    #
+    #     boxW = min(toX, width) - max(0, x)
+    #     boxH = min(toY, height) - max(0, y)
+    #
+    #     bx, by = max(0, x), max(0, y)
+    #     fx, fy = fWidth - boxW, fHeight - boxH
+    #
+    #     if not endX:
+    #         fx = 0
+    #
+    #     if not endY:
+    #         fy = 0
+    #
+    #     if boxW > 0 and boxH > 0:
+    #         alpha = opacity
+    #
+    #         # background[bx:bx + boxW, by:by + boxH] = alpha * frame[fx:fx + boxW, fy:fy + boxH] + (
+    #         #         1 - alpha) * background[bx:bx + boxW, by:by + boxH]
+    #
+    #         background[by:by + boxH, bx:bx + boxW] = alpha * frame[fy:fy + boxH, fx:fx + boxW] + (
+    #                 1 - alpha) * background[by:by + boxH, bx:bx + boxW]
 
     def alpha_in(self, background, frame, ctime, duration=0.8):
 
@@ -302,45 +383,6 @@ class FrameClip(VideoClip):
             frame = frame[fh - distance:, :]
             x = toX
             y = toY + fh - distance
-
-        self.location(background, frame, x, y, endY=False)
-
-    def zoom(self, background, frame, toX, toY, ctime, duration=0.8, zoom=0.2):
-        step = 0.000000001
-        count = 1 / step
-
-        w, h = background.shape[1], background.shape[0]
-        fw, fh = frame.shape[1], frame.shape[0]
-
-        ftime = count - (count * ctime / duration)
-
-        quart = self.ease_quart(ftime)
-        total = self.ease_quart(count)
-
-        progress = (1 - quart / total)
-        scale = 1 + zoom * progress
-        sw, sh = int(fw * scale), int(fh * scale)
-
-        if sw % 2 != 0:
-            sw += 1
-
-        if sh % 2 != 0:
-            sh += 1
-
-        cx = toX + fw // 2
-        cy = toY + fh // 2
-
-        # factors = (sh / fh, sw / fw, 1)  # (H, W, C)
-        # zoomFrame = cp.array(ndimage.zoom(cp.asnumpy(frame), factors, order=3))  # 使用三次插值
-        # # zoomFrame = np.array(ndimage.zoom(frame, factors, order=3))  # 使用三次插值
-        # frame = zoomFrame
-
-        # cx = tox + zw // 2
-        toX = cx - sw // 2
-        toY = cy - sh // 2
-
-        x = toX
-        y = toY
 
         self.location(background, frame, x, y, endY=False)
 
@@ -614,7 +656,7 @@ class FileClip(FrameClip):
 
                 if isImage:
                     image = Image.open(videoPath).convert('RGB')
-                    imageClip = ImageClip(np.array(image))
+                    imageClip = ImageClip(np.array(image)).set_duration(2).set_fps(self.fps)
                     # imageClip = ImageClip(cp.asnumpy(image))
                     # imageClip = ImageClip(np.array(image))
                     width, height = imageClip.size[0], imageClip.size[1]
@@ -638,7 +680,20 @@ class FileClip(FrameClip):
                     videoClip = videoClip.resize(newsize=targetSize)
                     # videoClip = VideoFileClip(videoPath).subclip(start, end).resize(newsize=self.size)
 
-                medias.append((videoClip, start, end, isImage, mediaIn, mediaOut, location))
+                if scene > 1 and count == 0:  # 对齐
+                    sceneWidth = min(sceneWidth, videoClip.size[0])
+                    sceneHeight = min(sceneHeight, videoClip.size[1])
+
+                scaleClip = videoClip
+                if isImage and scene == 1:
+                    scaleFrom = 1
+                    scaleTo = 1.2
+
+                    scaleClip = MediaScaleClip(videoClip, scaleFrom, scaleTo,
+                                               size=(
+                                                   int(videoClip.size[0] * scaleTo), int(videoClip.size[1] * scaleTo)))
+
+                medias.append((videoClip, scaleClip, start, end, isImage, mediaIn, mediaOut, location))
                 scenes.append((count, scene))
 
                 count += 1
@@ -655,18 +710,18 @@ class FileClip(FrameClip):
             audioStart = float(parts[0])
             audioEnd = float(parts[1])
 
-            videoClip, videoStart, videoEnd, isImage, mediaIn, mediaOut, location = self.medias[line]
+            videoClip, scaleClip, videoStart, videoEnd, isImage, mediaIn, mediaOut, location = self.medias[line]
 
             t = min(max(t, audioStart), audioEnd)
             fileDuration = videoEnd - videoStart
             audioDuration = audioEnd - audioStart
             ft = (t - audioStart) * fileDuration / audioDuration
 
-            frame = cp.array(videoClip.get_frame(ft), dtype=cp.uint8)
+            frame = self.to_array(videoClip.get_frame(ft))
             # frame = np.array(videoClip.get_frame(ft), dtype=np.uint8)
             # frame = torch.tensor(videoClip.get_frame(ft), device=self.device, dtype=torch.uint8)
 
-            return frame, (t - audioStart), audioDuration, mediaIn, mediaOut, location, isImage
+            return frame, scaleClip, (t - audioStart), audioDuration, mediaIn, mediaOut, location, isImage
 
         return None
 
@@ -679,7 +734,7 @@ class FileClip(FrameClip):
         background = self.create_frame(width, height, color)
 
         if t <= 0.1 and self.coverClip is not None:
-            frame = cp.array(self.coverClip.get_frame(0), dtype=cp.uint8)
+            frame = self.to_array(self.coverClip.get_frame(0))
             fw, fh = frame.shape[1], frame.shape[0]
             offsetX = width - fw
             offsetY = height - fh
@@ -698,7 +753,7 @@ class FileClip(FrameClip):
 
             for i in range(count):
                 textLine = fromIndex + 1 + i
-                frame, ft, fd, mediaIn, mediaOut, location, isImage = self.file_frame(textLine, t)
+                frame, scaleClip, ft, fd, mediaIn, mediaOut, location, isImage = self.file_frame(textLine, t)
                 fx, fy, itemWidth, itemHeight = location[0], location[1], location[2], location[3]
 
                 fWidth, fHeight = frame.shape[1], frame.shape[0]
@@ -754,6 +809,19 @@ class FileClip(FrameClip):
                     else:
                         self.left_out(background, frame, x, y, ft, duration=outTime)
                 else:
+
+                    if isImage and mediaCount == 1:
+                        ad = fd - (outTime + inTime)
+                        ft = ft - inTime
+                        # ft / ad = rt / duration
+                        rt = scaleClip.duration * ft / ad
+                        frame = self.to_array(scaleClip.get_frame(rt))
+                        offsetX = width - frame.shape[1]
+                        offsetY = height - frame.shape[0]
+
+                        x = offsetX // 2
+                        y = offsetY // 2
+
                     self.location(background, frame, x, y)
 
             srtFrame = self.srt_frame(t)
@@ -777,14 +845,14 @@ musicPath = "E:\\douyin\\music.mp3"
 #
 # outputPath = "E:\\douyin\\videos\\车床介绍.mp4"
 
-coverPath = "E:\\douyin\\章太炎\\章太炎封面.png"
+coverPath = "E:\\douyin\\王国维\\王国维封面.png"
 
-audioPath = "E:\\douyin\\章太炎\\天王晁盖-章太炎.wav"
-filesPath = "E:\\douyin\\章太炎\\天王晁盖-章太炎.files"
-srtPath = "E:\\douyin\\章太炎\\天王晁盖-章太炎.srt"
-textPath = "E:\\douyin\\章太炎\\天王晁盖-章太炎.txt"
+audioPath = "E:\\douyin\\王国维\\玉麒麟卢俊义-王国维.wav"
+filesPath = "E:\\douyin\\王国维\\玉麒麟卢俊义-王国维.files"
+srtPath = "E:\\douyin\\王国维\\玉麒麟卢俊义-王国维.srt"
+textPath = "E:\\douyin\\王国维\\玉麒麟卢俊义-王国维.txt"
 
-outputPath = "E:\\douyin\\章太炎\\天王晁盖-章太炎.mp4"
+outputPath = "E:\\douyin\\王国维\\玉麒麟卢俊义-王国维.mp4"
 
 videoClip = FileClip(textPath, filesPath, audioPath, srtPath, musicPath=musicPath, coverPath=coverPath)
 videoClip.write_videofile(outputPath, codec='libx264', audio_codec='aac', preset="fast", threads=4,
