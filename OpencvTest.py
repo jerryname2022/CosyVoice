@@ -223,4 +223,9 @@ def test6():
     # plt.show()
 
 
-test6()
+def test7():
+    print(cv2.__version__)
+    tracker = cv2.TrackerCSRT_create()
+
+
+test7()
