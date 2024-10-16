@@ -328,15 +328,19 @@ class TxtClip(BaseClip):
 
         self.setup_media()
 
-    def font_Size(self, image, imageDraw, textCount, fontPath, rate=0.8):
+    def font_size(self, image, imageDraw, textCount, fontPath, rate=0.8):
         width, height = image.size
         maxWidth = int(rate * width)
         maxHeight = int(rate * height)
 
         calculateTexts = ""
-        for index in range(textCount + 1):
+        # for index in range(textCount + 1):
+        #     calculateTexts += "趣"
+
+        for index in range(textCount):
             calculateTexts += "趣"
 
+        calculateTexts += "a"
         calculateSize = 10
 
         while True:
@@ -364,7 +368,7 @@ class TxtClip(BaseClip):
         image = Image.fromarray(np.array(frame))
 
         imageDraw = ImageDraw.Draw(image)
-        fontSize = self.font_Size(image, imageDraw, len(self.text), self.fontPath, rate=0.8)
+        fontSize = self.font_size(image, imageDraw, len(self.text), self.fontPath, rate=0.8)
 
         text = self.text
         textWidth, textHeight = imageDraw.textsize(text,
@@ -415,6 +419,255 @@ class TxtClip(BaseClip):
         return background
 
 
+class PageTextClip(BaseClip):
+    def __init__(self, mediaClip, texts, lineCount, textCount, size=(1920, 1080), fps=30,
+                 fontColor=(0, 0, 0, 0xFF),
+                 fontPath=f"D:\\CosyVoice\\asset\\TW-Kai-98_1.ttf"):
+
+        super().__init__(mediaClip.duration, size=size, fps=fps)
+
+        self.mediaClip = mediaClip
+        self.texts = texts
+        self.lineCount = lineCount
+        self.textCount = textCount
+        self.fontColor = fontColor
+        self.fontPath = fontPath
+
+        self.setup_medias()
+
+    def font_size(self, image, imageDraw, textCount, fontPath, rate=0.8):
+        width, height = image.size
+        maxWidth = int(rate * width)
+        maxHeight = int(rate * height)
+
+        calculateTexts = ""
+        # for index in range(textCount + 1):
+        #     calculateTexts += "趣"
+
+        for index in range(textCount):
+            calculateTexts += "趣"
+
+        calculateTexts += "a"
+        calculateSize = 10
+
+        while True:
+            # left, top, right, bottom = imageDraw.textbbox((0, 0), calculateTexts,
+            #                                               font=ImageFont.truetype(fontPath, size=calculateSize))
+            # textWidth = right - left
+            # textHeight = bottom - top
+            textWidth, textHeight = imageDraw.textsize(calculateTexts,
+                                                       font=ImageFont.truetype(fontPath, size=calculateSize))
+            calculateSize += 2
+
+            if (textWidth > maxWidth or textHeight > maxHeight):
+                break
+
+        return calculateSize
+
+    def split_texts(self, text, length):
+        return [text[i:i + length] for i in range(0, len(text), length)]
+
+    def new_page(self, image, withLine=True, lineColor=(0x46, 0x4C, 0x4E, 0x20), widthRate=0.92, heightRate=0.96):
+        # image = Image.open(imagePath)
+        imageDraw = ImageDraw.Draw(image)
+
+        width, height = image.size
+        textMaxWidth = int(widthRate * width)
+        textMaxHeight = int(heightRate * height)
+
+        marginX = int((width - textMaxWidth) / 2)
+        marginY = int((height - textMaxHeight) / 2)
+
+        textHeight = int(textMaxHeight / self.lineCount)
+        textWidth = int(textMaxWidth / self.textCount)
+
+        fontSize = self.font_size(image, imageDraw, self.textCount, self.fontPath, rate=widthRate)
+        lineHeight = marginY
+
+        while withLine:
+            imageDraw.line([(marginX, lineHeight), (width - marginX, lineHeight)], fill=lineColor, width=1)
+            lineHeight += textHeight
+            if lineHeight > (height - marginY):
+                break
+        return image, imageDraw, fontSize, marginX, marginY, textHeight, textWidth
+
+    def setup_medias(self):
+
+        maxLineCount = self.lineCount
+        maxTextCount = self.textCount
+
+        frame = self.mediaClip.get_frame(0)
+        background = Image.fromarray(np.array(frame))
+
+        image, imageDraw, fontSize, marginX, marginY, textHeight, textWidth = self.new_page(background)
+
+        lineCount = 0
+        pageCount = 0
+
+        locations = []
+        imageClips = []
+
+        for line in self.texts:
+            newline = True
+            textLines = self.split_texts("，，" + line, maxTextCount)
+
+            for text in textLines:
+                if lineCount >= maxLineCount:
+                    # 保存
+                    # image.save(os.path.join(imageRoot, "{}.png".format(pageCount)))
+                    imageClip = ImageClip(np.array(image))
+                    imageClips.append(imageClip)
+
+                    pageCount += 1
+                    lineCount = 0
+                    background = Image.fromarray(np.array(frame))
+                    image, imageDraw, fontSize, marginX, marginY, textHeight, textWidth = self.new_page(background)
+
+                fromX = marginX
+                fromY = marginY + lineCount * textHeight
+
+                if newline:
+                    fromX += (2 * textWidth)
+                    text = text[2:len(text)]
+
+                charFlow = ""
+                for char in text:
+                    if is_text(char):
+                        # left, top, right, bottom = imageDraw.textbbox((fromX, fromY), charFlow,
+                        #                                               font=ImageFont.truetype(self.fontPath,
+                        #                                                                       size=fontSize))
+
+                        flowWidth, flowHeight = imageDraw.textsize(charFlow,
+                                                                   font=ImageFont.truetype(self.fontPath,
+                                                                                           size=fontSize))
+
+                        # flowWidth = right - left
+                        # flowHeight = bottom - top
+
+                        # left, top, right, bottom = imageDraw.textbbox((fromX, fromY), char,
+                        #                                               font=ImageFont.truetype(self.fontPath,
+                        #                                                                       size=fontSize))
+
+                        charWidth, charHeight = imageDraw.textsize(char,
+                                                                   font=ImageFont.truetype(self.fontPath,
+                                                                                           size=fontSize))
+
+                        # charWidth = right - left
+                        # location = f'{int(fromX)}:{int(fromY)}:{int(flowWidth)}:{int(charWidth)}:{int(textHeight)}\r'
+                        locations.append(
+                            (pageCount, int(fromX), int(fromY), int(flowWidth), int(charWidth), int(textHeight),
+                             image.size[0], image.size[1]))
+
+                    charFlow += char
+
+                imageDraw.text((fromX, fromY), text, self.fontColor,
+                               font=ImageFont.truetype(self.fontPath, size=fontSize))
+                # print(text)
+                lineCount += 1
+                newline = False
+
+        imageClip = ImageClip(np.array(image))
+        imageClips.append(imageClip)
+
+        self.imageClips = imageClips
+        self.locations = locations
+
+
+class EBookPageClip(PageTextClip):
+    def __init__(self, audioFile, srtFile, textFile, mediaPath, lineCount=15, textCount=28, coverPath="",
+                 size=(1920, 1080), fps=30, fontColor=(0, 0, 0, 0xFF),
+                 fontPath=f"D:\\CosyVoice\\asset\\TW-Kai-98_1.ttf"):
+
+        audio = AudioFileClip(audioFile)
+        image = Image.open(mediaPath).convert('RGB')
+        mediaClip = ImageClip(np.array(image)).set_duration(audio.duration).set_fps(fps)
+        lines = read_lines(textFile)
+
+        super().__init__(mediaClip, lines, lineCount=lineCount, textCount=textCount, size=size, fps=fps,
+                         fontColor=fontColor, fontPath=fontPath)
+
+        texts, times, srtTexts, srtTimes, maxCount = srt_texts_times(srtFile)
+
+        self.coverClip = None
+        if os.path.exists(coverPath):
+            image = Image.open(coverPath).convert('RGB')
+            self.coverClip = ImageClip(np.array(image))
+
+        self.audio = audio
+        self.texts = texts
+        self.times = times
+        self.srtTexts = srtTexts
+        self.srtTimes = srtTimes
+
+    def text_index(self, t):
+        index = 0
+        for item in self.times:
+            ftime = float(item)
+            if ftime > t:
+                return index
+            if index < (len(self.times) - 1):
+                index += 1
+        return index
+
+    def make_frame(self, t):
+
+        width, height = self.size[0], self.size[1]
+        color = (0x00, 0x00, 0x00)
+
+        background = self.create_frame(width, height, color)
+
+        if t <= 0.1 and self.coverClip is not None:
+            frame = self.to_array(self.coverClip.get_frame(0))
+            fw, fh = frame.shape[1], frame.shape[0]
+            offsetX = width - fw
+            offsetY = height - fh
+            x = offsetX // 2
+            y = offsetY // 2
+            self.location(background, frame, x, y)
+        else:
+
+            index = self.text_index(t)
+            mediaIndex, fromX, fromY, flowWidth, charWidth, charHeight, pageWidth, pageHeight = self.locations[index]
+
+            fromX = int(width * fromX / pageWidth)
+            fromY = int(height * fromY / pageHeight)
+            flowWidth = int(width * flowWidth / pageWidth)
+            charWidth = int(width * charWidth / pageWidth)
+            charHeight = int(height * charHeight / pageHeight)
+
+            fromTime = 0
+            if index - 1 >= 0:
+                fromTime = float(self.times[index - 1])
+            toTime = float(self.times[index])
+
+            if fromTime < toTime:
+                rate = float((t - fromTime) / (toTime - fromTime))
+            else:
+                rate = 0
+
+            # rate = max(min(rate, 1), 0)
+            maskHeight = charHeight
+            maskWidth = max(0, int(flowWidth + charWidth * (0.4 + rate)))
+
+            # Create the mask frame with the specified color and opacity
+            maskColor = (0xDF, 0x30, 0x00)  # RGB color
+            maskFrame = self.create_frame(maskWidth, maskHeight, maskColor)
+
+            imageClip = self.imageClips[mediaIndex]
+            frame = self.to_array(imageClip.get_frame(0))
+
+            self.location(frame, maskFrame, fromX, fromY, opacity=0.3)
+
+            fw, fh = frame.shape[1], frame.shape[0]
+            offsetX = width - fw
+            offsetY = height - fh
+            x = offsetX // 2
+            y = offsetY // 2
+            self.location(background, frame, x, y)
+
+        return background
+
+
 class SrtClip(BaseClip):
     def __init__(self, audioFile, srtFile, size=(1920, 1080), fps=30, coverPath=None, musicPath=None,
                  fontColor=(0, 0, 0, 0xFF),
@@ -450,15 +703,19 @@ class SrtClip(BaseClip):
 
         print("texts times ... ", len(texts), len(times))
 
-    def font_Size(self, image, imageDraw, textCount, fontPath, rate=0.8):
+    def font_size(self, image, imageDraw, textCount, fontPath, rate=0.8):
         width, height = image.size
         maxWidth = int(rate * width)
         maxHeight = int(rate * height)
 
         calculateTexts = ""
-        for index in range(textCount + 1):
+        # for index in range(textCount + 1):
+        #     calculateTexts += "趣"
+
+        for index in range(textCount):
             calculateTexts += "趣"
 
+        calculateTexts += "a"
         calculateSize = 10
 
         while True:
@@ -486,7 +743,7 @@ class SrtClip(BaseClip):
 
         image = Image.new('RGBA', (width, height), color=color)
         imageDraw = ImageDraw.Draw(image)
-        fontSize = self.font_Size(image, imageDraw, self.maxCount, self.fontPath, rate=0.8)
+        fontSize = self.font_size(image, imageDraw, self.maxCount, self.fontPath, rate=0.8)
 
         colorOffset = 15
         fillColor = (self.backgroundColor[0] - colorOffset, self.backgroundColor[1] - colorOffset,
@@ -749,7 +1006,6 @@ class FileClip(SrtClip):
                         color = self.backgroundColor
                         newFrame = np.zeros((sceneWidth, sceneHeight, 3), dtype=np.uint8)
                         newFrame[:, :, :3] = color
-
                         imageClip = ImageClip(newFrame).set_duration(2).set_fps(self.fps)
                     else:
                         direction = "ttb"
@@ -891,11 +1147,11 @@ class FileClip(SrtClip):
                     y = 0
 
                     ft = ft - (fd - outTime)
-                    if mediaIn == 1:
+                    if mediaOut == 1:
                         self.bottom_out(background, frame, x, y, ft, duration=outTime)
-                    elif mediaIn == 2:
+                    elif mediaOut == 2:
                         self.top_out(background, frame, x, y, ft, duration=outTime)
-                    elif mediaIn == 3:
+                    elif mediaOut == 3:
                         self.right_out(background, frame, x, y, ft, duration=outTime)
                     else:
                         self.left_out(background, frame, x, y, ft, duration=outTime)
@@ -921,7 +1177,7 @@ class FileClip(SrtClip):
                 offsetX = width - fWidth
                 x = offsetX // 2
                 y = height - int(fHeight * 1.1)
-                self.location(background, srtFrame, x, y, opacity=0.75)
+                self.location(background, srtFrame, x, y, opacity=0.70)
 
         return background
         # return background.cpu().numpy()
@@ -949,16 +1205,28 @@ videoClip = FileClip(textPath, filesPath, audioPath, srtPath, musicPath=musicPat
 videoClip.write_videofile(outputPath, codec='libx264', audio_codec='aac', preset="fast", threads=4,
                           ffmpeg_params=["-gpu", "cuda"])
 
-# duration = 5
-# fps = 30
 #
 # mediaPath = "E:\\douyin\\书面.png"
 # outputPath = "E:\\douyin\\书面_out.mp4"
-#
+# duration = 5
+# fps = 30
 # image = Image.open(mediaPath).convert('RGB')
 # mediaClip = ImageClip(np.array(image)).set_duration(duration).set_fps(fps)
 #
 # txt = "殷虚书契考释"
 # videoClip = TxtClip(mediaClip, txt, direction="ttb")
 # videoClip.write_videofile(outputPath, codec='libx264', audio_codec='aac', preset="fast", threads=4,
+#                           ffmpeg_params=["-gpu", "cuda"])
+
+# audioFile = "E:\\youtube\\hlm\\2\\2-2.wav"
+# srtFile = "E:\\youtube\\hlm\\2\\2-2.srt"
+# textFile = "E:\\youtube\\hlm\\2\\2-2.txt"
+# videoOut = "E:\\youtube\\hlm\\2\\2-2-test.mp4"
+#
+# mediaPath = 'E:\\book1920.png'
+# duration = 5
+# fps = 30
+#
+# videoClip = EBookPageClip(audioFile, srtFile, textFile, mediaPath)
+# videoClip.write_videofile(videoOut, codec='libx264', audio_codec='aac', preset="fast", threads=4,
 #                           ffmpeg_params=["-gpu", "cuda"])
