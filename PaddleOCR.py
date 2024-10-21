@@ -6,7 +6,13 @@ if __name__ == '__main__':
     imageRoot = "C:\\Users\\Administrator\\Documents\\zuishiwenren"
     txtPath = "C:\\Users\\Administrator\\Documents\\zuishiwenren.txt"
 
+
+    def sort_name(element):
+        return int(element.split(".")[0])
+
+
     names = [f for f in os.listdir(imageRoot) if f.endswith('.txt')]
+    names.sort(key=sort_name)
 
     buffer = ""
     images = []

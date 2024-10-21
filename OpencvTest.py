@@ -226,6 +226,27 @@ def test6():
 def test7():
     print(cv2.__version__)
     tracker = cv2.TrackerCSRT_create()
+    tracking = False
+    cap = cv2.VideoCapture("F:\\yolov3\\videos\\video14.mp4")
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        if cv2.waitKey(1) == ord('a'):
+            tracking = True
+            roi = cv2.selectROI("tracking", frame, False)
+            tracker.init(frame, roi)
+        if tracking:
+            success, box = tracker.update(frame)
+            if success:
+                x, y, w, h = box
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0x00, 0xFF, 0x00), 2)
+
+        cv2.imshow("tracking", frame)
+        cv2.waitKey(1)
+    cap.release()
+    cv2.destroyAllWindows()
 
 
 test7()

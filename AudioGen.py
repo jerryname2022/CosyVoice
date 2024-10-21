@@ -1,8 +1,8 @@
-import os, logging, sys, torchaudio, chardet, subprocess
-
+import os, logging, sys, torchaudio, shutil, subprocess
 from cosyvoice.cli.cosyvoice import CosyVoice
 from cosyvoice.utils.file_utils import load_wav
 from utils.file_utils import read_lines, write_to_file
+from moviepy.editor import *
 
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
@@ -29,7 +29,7 @@ def requestSFT(ttsText, spkID, savePath):
 
 def requestZeroShot(ttsText, promptText, promptWav, savePath):
     prompt_speech_16k = load_wav(promptWav, 16000)
-    outputs = cosyvoice.inference_zero_shot(ttsText, promptText, prompt_speech_16k, speed=1.2)
+    outputs = cosyvoice.inference_zero_shot(ttsText, promptText, prompt_speech_16k, speed=0.95)
 
     count = 0
     for output in outputs:
@@ -63,17 +63,59 @@ def text2Voices(textPath, promptName, promptText, promptWav):
     # print(filename, folder, basename)
     lines = read_lines(textPath)
 
+    key = "##"
     medias = []
     for index in range(len(lines)):
         text = lines[index].strip()
-        if len(text) <= 1:
+
+        splits = text.split(key)
+        spacing = "0"
+        if len(splits) > 1:
+            spacing = splits[0]
+            text = splits[1]
+
+        spacingFile = ""
+
+        if spacing == "1":
+            spacingFile = "./asset/spacing1.wav"
+        elif spacing == "2":
+            spacingFile = "./asset/spacing2.wav"
+        elif spacing == "3":
+            spacingFile = "./asset/spacing3.wav"
+        elif spacing == "0":
+            spacingFile = "./asset/spacing01.wav"
+
+        spacingName = os.path.basename(spacingFile)
+
+        if len(text) < 1:
             break
+
         wav = "{}.wav".format(index)
+
+        if os.path.isfile(spacingFile) and os.path.exists(spacingFile):
+            targetSpacingFile = os.path.join(voiceRoot, spacingName)
+
+            if not os.path.exists(targetSpacingFile):
+                shutil.copyfile(spacingFile, targetSpacingFile)
+
+            medias.append(targetSpacingFile)  # TODO
+
         wavFile = os.path.join(voiceRoot, wav)
+
         print(wavFile, text)
         medias.append(wavFile)
 
         requestZeroShot(text, promptText, promptWav, wavFile)
+
+    spacingFile = "./asset/spacing1.wav"
+    spacingName = os.path.basename(spacingFile)
+    targetSpacingFile = os.path.join(voiceRoot, spacingName)
+
+    if not os.path.exists(targetSpacingFile):
+        shutil.copyfile(spacingFile, targetSpacingFile)
+
+    medias.append(targetSpacingFile)
+
     mergeMedias(medias, savePath)
 
 
@@ -86,6 +128,7 @@ wavs = {
     "科技感-男声": "./asset/kejigan-nan.wav",
     "专题片-男声": "./asset/zhuantipian-nan.wav",
     "朗读-女声": "./asset/langdu-nv.wav",
+    "捉刀漫谈": "./asset/捉刀漫谈.wav",
 }
 
 prompts = {
@@ -97,6 +140,7 @@ prompts = {
     "科技感-男声": "从古至今,蚊子与人类的战争从未停止,传话一直在探索更好的防蚊虫方案",
     "专题片-男声": "在抗日战争刚刚爆发的历史转折关头",
     "朗读-女声": "站在你面前的是宋四家之首,唐宋八大家之一",
+    "捉刀漫谈": "19世纪法国伟大的文学家雨果,他的代表作悲惨世界里面的流浪儿童,有两句有意思的歌词",
 }
 
 
@@ -118,17 +162,24 @@ def ffmpegCommand(medias, mediaOut):
 
 
 def mergeMedias(medias, mediaOut):
-    command = ffmpegCommand(medias, mediaOut)
-    try:
-        # Execute the command using subprocess
-        process = subprocess.run(command, check=True)
-        if process.returncode == 0:
-            print("Video merging is successful.")
-        else:
-            print("An error occurred during video merging.")
+    audioClips = []
+    for audiofile in medias:
+        audioClips.append(AudioFileClip(audiofile))
 
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to merge videos: {e}")
+    audioClip = concatenate_audioclips(audioClips)
+    audioClip.write_audiofile(mediaOut)
+
+    # command = ffmpegCommand(medias, mediaOut)
+    # try:
+    #     # Execute the command using subprocess
+    #     process = subprocess.run(command, check=True)
+    #     if process.returncode == 0:
+    #         print("Video merging is successful.")
+    #     else:
+    #         print("An error occurred during video merging.")
+    #
+    # except subprocess.CalledProcessError as e:
+    #     print(f"Failed to merge videos: {e}")
 
 
 def testMerge():
@@ -145,7 +196,7 @@ if __name__ == "__main__":
     spkID = "中文女"
     savePath = "./asset/zeroShot.wav"
 
-    promptName = "专题片-男声"  # "封神榜男旁白", 舌尖上的中国  ,过秦论 上虞代言人-男声  科技感-男声  专题片-男声 朗读-女声
+    promptName = "捉刀漫谈"  # "封神榜男旁白", 舌尖上的中国  ,过秦论 上虞代言人-男声  科技感-男声  专题片-男声 朗读-女声 捉刀漫谈
     promptText = prompts[promptName]
     promptWav = wavs[promptName]
 
@@ -153,7 +204,8 @@ if __name__ == "__main__":
     # requestZeroShot(text, promptText, promptWav, savePath)
 
     # shitouji = "E:\\douyin\\videos\\车床介绍.txt"
-    shitouji = "C:\\Users\\Administrator\\Documents\\现代学林点将录\\8.顾颉刚\\霹雳火秦明-顾颉刚.txt"
+    # shitouji = "C:\\Users\\Administrator\\Documents\\现代学林点将录\\8.顾颉刚\\霹雳火秦明-顾颉刚.txt"
+    shitouji = "C:\\Users\\Administrator\\Documents\\最是文人\\顾城杀妻案.txt"
 
     text2Voices(shitouji, promptName, promptText, promptWav)
 

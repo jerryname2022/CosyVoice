@@ -340,7 +340,7 @@ class TxtClip(BaseClip):
         for index in range(textCount):
             calculateTexts += "趣"
 
-        calculateTexts += "a"
+        # calculateTexts += "a"
         calculateSize = 10
 
         while True:
@@ -677,7 +677,7 @@ class SrtClip(BaseClip):
         if os.path.exists(musicPath):
             music = AudioFileClip(musicPath)
             music = music.fx(afx.audio_loop, duration=audio.duration)
-            audio = CompositeAudioClip([audio.volumex(1.2), music.volumex(0.1)])
+            audio = CompositeAudioClip([audio.volumex(1.2), music.volumex(0.11)])
 
         super().__init__(audio.duration, size=size, fps=fps)
 
@@ -1009,7 +1009,7 @@ class FileClip(SrtClip):
                         imageClip = ImageClip(newFrame).set_duration(2).set_fps(self.fps)
                     else:
                         direction = "ttb"
-                        bookPath = "E:\\douyin\\书面.png"
+                        bookPath = "E:\\douyin\\book.png"
                         image = Image.open(bookPath).convert('RGB')
                         imageClip = ImageClip(np.array(image)).set_duration(2).set_fps(self.fps)
 
@@ -1183,7 +1183,7 @@ class FileClip(SrtClip):
         # return background.cpu().numpy()
 
 
-musicPath = "E:\\douyin\\music1.mp3"
+musicPath = "E:\\douyin\\music01.mp3"
 
 # audioPath = "E:\\douyin\\videos\\车床介绍.wav"
 # filesPath = "E:\\douyin\\videos\\车床介绍.files"
@@ -1192,14 +1192,14 @@ musicPath = "E:\\douyin\\music1.mp3"
 #
 # outputPath = "E:\\douyin\\videos\\车床介绍.mp4"
 
-coverPath = "E:\\douyin\\7.罗振玉\\罗振玉背景.png"
+coverPath = "E:\\douyin\\寂寞沈从文\\寂寞沈从文.png"
 
-audioPath = "E:\\douyin\\7.罗振玉\\豹子头林冲-罗振玉.wav"
-filesPath = "E:\\douyin\\7.罗振玉\\豹子头林冲-罗振玉.files"
-srtPath = "E:\\douyin\\7.罗振玉\\豹子头林冲-罗振玉.srt"
-textPath = "E:\\douyin\\7.罗振玉\\豹子头林冲-罗振玉.txt"
+audioPath = "E:\\douyin\\寂寞沈从文\\寂寞沈从文.wav"
+filesPath = "E:\\douyin\\寂寞沈从文\\寂寞沈从文.files"
+srtPath = "E:\\douyin\\寂寞沈从文\\寂寞沈从文.srt"
+textPath = "E:\\douyin\\寂寞沈从文\\寂寞沈从文.txt"
 
-outputPath = "E:\\douyin\\7.罗振玉\\豹子头林冲-罗振玉.mp4"
+outputPath = "E:\\douyin\\寂寞沈从文\\寂寞沈从文.mp4"
 
 videoClip = FileClip(textPath, filesPath, audioPath, srtPath, musicPath=musicPath, coverPath=coverPath)
 videoClip.write_videofile(outputPath, codec='libx264', audio_codec='aac', preset="fast", threads=4,

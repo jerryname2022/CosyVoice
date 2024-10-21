@@ -81,4 +81,4 @@ audio = f"E:\\youtube\hlm\\{count}/{count}.wav"
 txtFile = f"E:\\youtube\hlm\\{count}/{count}.txt"
 texts = read_lines(txtFile)
 
-genAudioSrt(audio, txtInputs=texts)
+genAudioSrt(audio)
