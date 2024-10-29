@@ -51,9 +51,9 @@ def requestInstruct(ttsText, spkID, instructText, savePath):
     torchaudio.save(savePath, output['tts_speech'], 22050)
 
 
-def text2Voices(textPath, promptName, promptText, promptWav):
-    filename = os.path.basename(textPath)
-    folder = os.path.dirname(textPath)
+def genVoices(textfile, promptName, promptText, promptWav, force=False):
+    filename = os.path.basename(textfile)
+    folder = os.path.dirname(textfile)
     basename = str(filename).split(".")[0]
 
     voiceRoot = os.path.join(folder, "{}_{}".format(basename, promptName))
@@ -61,7 +61,7 @@ def text2Voices(textPath, promptName, promptText, promptWav):
 
     savePath = os.path.join(folder, "{}_{}.wav".format(basename, promptName))
     # print(filename, folder, basename)
-    lines = read_lines(textPath)
+    lines = read_lines(textfile)
 
     key = "##"
     medias = []
@@ -105,7 +105,8 @@ def text2Voices(textPath, promptName, promptText, promptWav):
         print(wavFile, text)
         medias.append(wavFile)
 
-        requestZeroShot(text, promptText, promptWav, wavFile)
+        if force or not os.path.exists(wavFile):
+            requestZeroShot(text, promptText, promptWav, wavFile)
 
     spacingFile = "./asset/spacing1.wav"
     spacingName = os.path.basename(spacingFile)
@@ -192,21 +193,20 @@ def testMerge():
 
 
 if __name__ == "__main__":
-    text = "原来女娲氏炼石补天之时"
-    spkID = "中文女"
-    savePath = "./asset/zeroShot.wav"
-
-    promptName = "捉刀漫谈"  # "封神榜男旁白", 舌尖上的中国  ,过秦论 上虞代言人-男声  科技感-男声  专题片-男声 朗读-女声 捉刀漫谈
-    promptText = prompts[promptName]
-    promptWav = wavs[promptName]
-
+    # text = "原来女娲氏炼石补天之时"
+    # spkID = "中文女"
+    # savePath = "./asset/zeroShot.wav"
     # requestSFT(text, spkID, savePath)
     # requestZeroShot(text, promptText, promptWav, savePath)
 
+    promptName = "朗读-女声"  # "封神榜男旁白", 舌尖上的中国  ,过秦论 上虞代言人-男声  科技感-男声  专题片-男声 朗读-女声 捉刀漫谈
+    promptText = prompts[promptName]
+    promptWav = wavs[promptName]
+
     # shitouji = "E:\\douyin\\videos\\车床介绍.txt"
     # shitouji = "C:\\Users\\Administrator\\Documents\\现代学林点将录\\8.顾颉刚\\霹雳火秦明-顾颉刚.txt"
-    shitouji = "C:\\Users\\Administrator\\Documents\\最是文人\\顾城杀妻案.txt"
+    textfile = "C:\\Users\\Administrator\\Documents\\鬼吹灯之精绝古城\\第一章、白纸人和鼠友.txt"
 
-    text2Voices(shitouji, promptName, promptText, promptWav)
+    genVoices(textfile, promptName, promptText, promptWav)
 
     # testMerge()

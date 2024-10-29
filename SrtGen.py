@@ -44,11 +44,11 @@ def genAudioSrt(audioInput, txtInputs=None, output=None):
 
     res = model.generate(data,
                          return_spk_res=True,
-                         sentence_timestamp=True,
+                         sentence_timestamp=False,
                          return_raw_text=False,
                          is_final=True,
-                         pred_timestamp=False,
-                         en_post_proc=False,
+                         pred_timestamp=True,
+                         en_post_proc=True,
                          cache={})
 
     # print(res)
@@ -71,14 +71,16 @@ def genAudioSrt(audioInput, txtInputs=None, output=None):
         resSrt = srt_texts(subtitles)
         os.remove(temp)
 
-    print(resSrt)
+    # print(resSrt)
     write_to_file(output, resSrt)
     log_time("end ... ")
 
 
-count = 82
+count = 2
 audio = f"E:\\youtube\hlm\\{count}/{count}.wav"
 txtFile = f"E:\\youtube\hlm\\{count}/{count}.txt"
+# srtFile = f"E:\\youtube\hlm\\{count}/{count}.txt"
+
 texts = read_lines(txtFile)
 
-genAudioSrt(audio)
+genAudioSrt(audio, txtInputs=texts)

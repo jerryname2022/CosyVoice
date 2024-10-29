@@ -3,6 +3,7 @@
 # Copyright FunASR (https://github.com/alibaba-damo-academy/FunClip). All Rights Reserved.
 #  MIT License  (https://opensource.org/licenses/MIT)
 
+from datetime import timedelta
 from utils.file_utils import read_lines, write_to_file
 from utils.txt_utils import reset_texts, is_text
 
@@ -136,9 +137,28 @@ def parse_srt_time(formatTime):
         浮点数，表示秒数
     """
     hours, minutes, seconds = formatTime.split(':')
-    seconds, milliseconds = seconds.split(',')
+    milliseconds = 0
+    if ',' in seconds:
+        seconds, milliseconds = seconds.split(',')
+
     seconds = float(seconds) + int(milliseconds) / 1000
     return int(hours) * 3600 + int(minutes) * 60 + seconds
+
+
+def ms_to_time_string(*, ms=0, seconds=None):
+    # 计算小时、分钟、秒和毫秒
+    if seconds is None:
+        td = timedelta(milliseconds=ms)
+    else:
+        td = timedelta(seconds=seconds)
+    hours, remainder = divmod(td.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    milliseconds = td.microseconds // 1000
+
+    # 格式化为字符串
+    time_string = f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
+
+    return time_string
 
 
 def reset_srt(srtTxts, rightTxts):

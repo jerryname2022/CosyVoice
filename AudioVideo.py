@@ -531,15 +531,21 @@ class PageTextClip(BaseClip):
                     text = text[2:len(text)]
 
                 charFlow = ""
+                lastCharFlow = charFlow
                 for char in text:
                     if is_text(char):
                         # left, top, right, bottom = imageDraw.textbbox((fromX, fromY), charFlow,
                         #                                               font=ImageFont.truetype(self.fontPath,
                         #                                                                       size=fontSize))
 
-                        flowWidth, flowHeight = imageDraw.textsize(charFlow,
+                        flowWidth, flowHeight = imageDraw.textsize(lastCharFlow,
                                                                    font=ImageFont.truetype(self.fontPath,
                                                                                            size=fontSize))
+
+                        lastCharFlow = charFlow + char
+                        flowEndWidth, flowEndHeight = imageDraw.textsize(lastCharFlow,
+                                                                         font=ImageFont.truetype(self.fontPath,
+                                                                                                 size=fontSize))
 
                         # flowWidth = right - left
                         # flowHeight = bottom - top
@@ -548,9 +554,10 @@ class PageTextClip(BaseClip):
                         #                                               font=ImageFont.truetype(self.fontPath,
                         #                                                                       size=fontSize))
 
-                        charWidth, charHeight = imageDraw.textsize(char,
-                                                                   font=ImageFont.truetype(self.fontPath,
-                                                                                           size=fontSize))
+                        charWidth, charHeight = flowEndWidth - flowWidth, max(flowHeight, flowEndHeight)
+                        # charWidth, charHeight = imageDraw.textsize(char,
+                        #                                            font=ImageFont.truetype(self.fontPath,
+                        #                                                                    size=fontSize))
 
                         # charWidth = right - left
                         # location = f'{int(fromX)}:{int(fromY)}:{int(flowWidth)}:{int(charWidth)}:{int(textHeight)}\r'
@@ -627,43 +634,45 @@ class EBookPageClip(PageTextClip):
         else:
 
             index = self.text_index(t)
-            mediaIndex, fromX, fromY, flowWidth, charWidth, charHeight, pageWidth, pageHeight = self.locations[index]
+            if index < len(self.locations):
+                mediaIndex, fromX, fromY, flowWidth, charWidth, charHeight, pageWidth, pageHeight = self.locations[
+                    index]
 
-            fromX = int(width * fromX / pageWidth)
-            fromY = int(height * fromY / pageHeight)
-            flowWidth = int(width * flowWidth / pageWidth)
-            charWidth = int(width * charWidth / pageWidth)
-            charHeight = int(height * charHeight / pageHeight)
+                fromX = int(width * fromX / pageWidth)
+                fromY = int(height * fromY / pageHeight)
+                flowWidth = int(width * flowWidth / pageWidth)
+                charWidth = int(width * charWidth / pageWidth)
+                charHeight = int(height * charHeight / pageHeight)
 
-            fromTime = 0
-            if index - 1 >= 0:
-                fromTime = float(self.times[index - 1])
-            toTime = float(self.times[index])
+                fromTime = 0
+                if index - 1 >= 0:
+                    fromTime = float(self.times[index - 1])
+                toTime = float(self.times[index])
 
-            if fromTime < toTime:
-                rate = float((t - fromTime) / (toTime - fromTime))
-            else:
-                rate = 0
+                if fromTime < toTime:
+                    rate = float((t - fromTime) / (toTime - fromTime))
+                else:
+                    rate = 0
 
-            # rate = max(min(rate, 1), 0)
-            maskHeight = charHeight
-            maskWidth = max(0, int(flowWidth + charWidth * (0.4 + rate)))
+                # rate = max(min(rate, 1), 0)
+                maskHeight = charHeight
+                maskWidth = max(0, int(flowWidth + charWidth * rate))
 
-            # Create the mask frame with the specified color and opacity
-            maskColor = (0xDF, 0x30, 0x00)  # RGB color
-            maskFrame = self.create_frame(maskWidth, maskHeight, maskColor)
+                # Create the mask frame with the specified color and opacity
+                maskColor = (0xDF, 0x30, 0x00)  # RGB color
+                maskFrame = self.create_frame(maskWidth, maskHeight, maskColor)
 
-            imageClip = self.imageClips[mediaIndex]
-            frame = self.to_array(imageClip.get_frame(0))
+                imageClip = self.imageClips[mediaIndex]
+                frame = self.to_array(imageClip.get_frame(0))
 
-            self.location(frame, maskFrame, fromX, fromY, opacity=0.3)
+                self.location(frame, maskFrame, fromX, fromY, opacity=0.3)
 
-            fw, fh = frame.shape[1], frame.shape[0]
-            offsetX = width - fw
-            offsetY = height - fh
-            x = offsetX // 2
-            y = offsetY // 2
-            self.location(background, frame, x, y)
+                fw, fh = frame.shape[1], frame.shape[0]
+                offsetX = width - fw
+                offsetY = height - fh
+                x = offsetX // 2
+                y = offsetY // 2
+                self.location(background, frame, x, y)
 
         return background
 
@@ -1201,32 +1210,21 @@ textPath = "E:\\douyin\\寂寞沈从文\\寂寞沈从文.txt"
 
 outputPath = "E:\\douyin\\寂寞沈从文\\寂寞沈从文.mp4"
 
-videoClip = FileClip(textPath, filesPath, audioPath, srtPath, musicPath=musicPath, coverPath=coverPath)
-videoClip.write_videofile(outputPath, codec='libx264', audio_codec='aac', preset="fast", threads=4,
-                          ffmpeg_params=["-gpu", "cuda"])
-
-#
-# mediaPath = "E:\\douyin\\书面.png"
-# outputPath = "E:\\douyin\\书面_out.mp4"
-# duration = 5
-# fps = 30
-# image = Image.open(mediaPath).convert('RGB')
-# mediaClip = ImageClip(np.array(image)).set_duration(duration).set_fps(fps)
-#
-# txt = "殷虚书契考释"
-# videoClip = TxtClip(mediaClip, txt, direction="ttb")
+# videoClip = FileClip(textPath, filesPath, audioPath, srtPath, musicPath=musicPath, coverPath=coverPath)
 # videoClip.write_videofile(outputPath, codec='libx264', audio_codec='aac', preset="fast", threads=4,
 #                           ffmpeg_params=["-gpu", "cuda"])
 
-# audioFile = "E:\\youtube\\hlm\\2\\2-2.wav"
-# srtFile = "E:\\youtube\\hlm\\2\\2-2.srt"
-# textFile = "E:\\youtube\\hlm\\2\\2-2.txt"
-# videoOut = "E:\\youtube\\hlm\\2\\2-2-test.mp4"
-#
-# mediaPath = 'E:\\book1920.png'
-# duration = 5
-# fps = 30
-#
-# videoClip = EBookPageClip(audioFile, srtFile, textFile, mediaPath)
-# videoClip.write_videofile(videoOut, codec='libx264', audio_codec='aac', preset="fast", threads=4,
-#                           ffmpeg_params=["-gpu", "cuda"])
+
+count = 2
+audioFile = f"E:\\youtube\\hlm\\{count}\\{count}.wav"
+srtFile = f"E:\\youtube\\hlm\\{count}\\{count}.srt"
+textFile = f"E:\\youtube\\hlm\\{count}\\{count}.txt"
+videoOut = f"E:\\youtube\\hlm\\{count}\\{count}.mp4"
+
+mediaPath = 'E:\\book1920.png'
+duration = 5
+fps = 30
+
+videoClip = EBookPageClip(audioFile, srtFile, textFile, mediaPath)
+videoClip.write_videofile(videoOut, codec='libx264', audio_codec='aac', preset="fast", threads=4,
+                          ffmpeg_params=["-gpu", "cuda"])
