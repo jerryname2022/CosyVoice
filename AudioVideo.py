@@ -1215,16 +1215,17 @@ outputPath = "E:\\douyin\\寂寞沈从文\\寂寞沈从文.mp4"
 #                           ffmpeg_params=["-gpu", "cuda"])
 
 
-count = 2
+count = 40
 audioFile = f"E:\\youtube\\hlm\\{count}\\{count}.wav"
 srtFile = f"E:\\youtube\\hlm\\{count}\\{count}.srt"
 textFile = f"E:\\youtube\\hlm\\{count}\\{count}.txt"
 videoOut = f"E:\\youtube\\hlm\\{count}\\{count}.mp4"
+coverPath = f"E:\\youtube\\hlm\\{count}\\{count}.png"
 
 mediaPath = 'E:\\book1920.png'
 duration = 5
 fps = 30
 
-videoClip = EBookPageClip(audioFile, srtFile, textFile, mediaPath)
+videoClip = EBookPageClip(audioFile, srtFile, textFile, mediaPath, coverPath=coverPath)
 videoClip.write_videofile(videoOut, codec='libx264', audio_codec='aac', preset="fast", threads=4,
                           ffmpeg_params=["-gpu", "cuda"])

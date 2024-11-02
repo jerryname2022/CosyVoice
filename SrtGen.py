@@ -76,11 +76,11 @@ def genAudioSrt(audioInput, txtInputs=None, output=None):
     log_time("end ... ")
 
 
-count = 2
+count = 1
 audio = f"E:\\youtube\hlm\\{count}/{count}.wav"
 txtFile = f"E:\\youtube\hlm\\{count}/{count}.txt"
-# srtFile = f"E:\\youtube\hlm\\{count}/{count}.txt"
+srtFile = f"E:\\youtube\hlm\\{count}/{count}.srt"
 
-texts = read_lines(txtFile)
-
-genAudioSrt(audio, txtInputs=texts)
+if not os.path.exists(srtFile) and os.path.exists(txtFile):
+    texts = read_lines(txtFile)
+    genAudioSrt(audio, txtInputs=texts)

@@ -59,7 +59,7 @@ def get_lcs_indices(dp, text0, text1):
     return indices[::-1]
 
 
-def align_texts(text0, text1, marker="*"):
+def align_texts(text0, text1, symbol="*"):
     dp = longest_common_subsequence(text0, text1)  # 只接收dp
     lcs_indices = get_lcs_indices(dp, text0, text1)
 
@@ -72,13 +72,13 @@ def align_texts(text0, text1, marker="*"):
                 result0.append(text0[index0])
                 index0 += 1
             else:
-                result0.append(marker)
+                result0.append(symbol)
 
             if index1 < j:
                 result1.append(text1[index1])
                 index1 += 1
             else:
-                result1.append(marker)
+                result1.append(symbol)
 
         result0.append(text0[i])
         result1.append(text1[j])
@@ -87,11 +87,11 @@ def align_texts(text0, text1, marker="*"):
 
     while index0 < len(text0):
         result0.append(text0[index0])
-        result1.append(marker)
+        result1.append(symbol)
         index0 += 1
 
     while index1 < len(text1):
-        result0.append(marker)
+        result0.append(symbol)
         result1.append(text1[index1])
         index1 += 1
 
